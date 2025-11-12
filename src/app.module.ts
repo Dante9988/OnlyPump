@@ -1,13 +1,13 @@
 import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { PumpFunModule } from './modules/pump-fun/pump-fun.module';
-import { PumpSwapModule } from './modules/pump-swap/pump-swap.module';
-import { TokenMonitorModule } from './modules/token-monitor/token-monitor.module';
-import { TokensModule } from './tokens/tokens.module';
-import { UsersModule } from './users/users.module';
-import { PumpFunController } from './api/controllers/pump-fun.controller';
-import { PumpSwapController } from './api/controllers/pump-swap.controller';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Connection } from '@solana/web3.js';
+import { TokenManagementController } from './api/controllers/token-management.controller';
+import { TransactionHistoryController } from './api/controllers/transaction-history.controller';
 import { JitoService } from './services/jito.service';
+import { TokenManagementService } from './services/token-management.service';
+import { WalletAuthService } from './services/wallet-auth.service';
+import { TransactionHistoryService } from './services/transaction-history.service';
+import { VanityAddressManagerService } from './services/vanity-address-manager.service';
 import { WalletMiddleware } from './api/middleware/wallet.middleware';
 
 @Module({
@@ -15,26 +15,41 @@ import { WalletMiddleware } from './api/middleware/wallet.middleware';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    PumpFunModule,
-    PumpSwapModule,
-    TokenMonitorModule,
-    TokensModule,
-    UsersModule,
   ],
-  controllers: [PumpFunController, PumpSwapController],
-  providers: [JitoService],
+  controllers: [
+    TokenManagementController,
+    TransactionHistoryController,
+  ],
+  providers: [
+    JitoService,
+    TokenManagementService,
+    WalletAuthService,
+    VanityAddressManagerService,
+    {
+      provide: Connection,
+      useFactory: (configService: ConfigService) => {
+        const rpcUrl =
+          configService.get<string>('SOLANA_RPC_URL') ||
+          'https://api.devnet.solana.com';
+        return new Connection(rpcUrl, 'confirmed');
+      },
+      inject: [ConfigService],
+    },
+    TransactionHistoryService,
+  ],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(WalletMiddleware)
       .forRoutes(
-        { path: 'api/pump-fun/create-token', method: RequestMethod.POST },
-        { path: 'api/pump-fun/buy-token', method: RequestMethod.POST },
-        { path: 'api/pump-fun/sell-token', method: RequestMethod.POST },
-        { path: 'api/pump-swap/buy-token', method: RequestMethod.POST },
-        { path: 'api/pump-swap/sell-token', method: RequestMethod.POST },
-        { path: 'api/users/:address/collect-fees', method: RequestMethod.POST },
+        { path: 'api/tokens/create', method: RequestMethod.POST },
+        { path: 'api/tokens/create-and-buy', method: RequestMethod.POST },
+        { path: 'api/tokens/buy', method: RequestMethod.POST },
+        { path: 'api/tokens/sell', method: RequestMethod.POST },
+        { path: 'api/transactions/:walletAddress', method: RequestMethod.GET },
+        { path: 'api/transactions/:walletAddress/stats', method: RequestMethod.GET },
       );
+    // Note: api/transactions/tx/:signature is public (no auth required)
   }
 }

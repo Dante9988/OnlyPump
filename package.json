@@ -21,7 +21,9 @@
     "example": "ts-node src/examples/pump-fun-examples.ts",
     "example:test": "dotenv -e env.test -- ts-node src/examples/pump-fun-examples.ts",
     "dapp": "ts-node src/examples/web-dapp-example.ts",
-    "dapp:test": "dotenv -e env.test -- ts-node src/examples/web-dapp-example.ts"
+    "dapp:test": "dotenv -e env.test -- ts-node src/examples/web-dapp-example.ts",
+    "generate-signature": "node scripts/generate-signature.js",
+    "test-signature": "node scripts/test-signature.js"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
@@ -44,7 +46,8 @@
     "dotenv": "^16.4.5",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.9",

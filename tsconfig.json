@@ -1,8 +1,7 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "declaration": true,
-    "declarationDir": "./dist/types",
+    "declaration": false,
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
@@ -21,5 +20,15 @@
     "resolveJsonModule": true,
     "esModuleInterop": true
   },
-  "exclude": ["frontend", "frontend/**/*", "node_modules"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "backend-rs",
+    "backend-rs/**/*",
+    "onlypump-presale",
+    "onlypump-presale/**/*",
+    "target",
+    "**/*.spec.ts"
+  ],
+  "include": ["src/**/*"]
 }
