@@ -160,6 +160,10 @@ Body:
 }
 ```
 
+**Note:** This endpoint automatically detects if the token has migrated to PumpSwap (Raydium) and uses the appropriate SDK. Works for both:
+- **Non-migrated tokens**: Uses Pump.fun bonding curve
+- **Migrated tokens**: Uses PumpSwap AMM
+
 #### Sell Token
 ```http
 POST /api/tokens/sell
@@ -181,6 +185,10 @@ Body:
   "type": "SELL"
 }
 ```
+
+**Note:** This endpoint automatically detects if the token has migrated to PumpSwap (Raydium) and uses the appropriate SDK. Works for both:
+- **Non-migrated tokens**: Uses Pump.fun bonding curve
+- **Migrated tokens**: Uses PumpSwap AMM
 
 #### Create and Buy Token
 ```http
@@ -309,16 +317,18 @@ The middleware verifies that the signature matches the wallet address in the rou
 
 ### TokenManagementService
 
-Handles all Pump.fun token operations:
+Handles all Pump.fun and PumpSwap token operations:
 - `createToken()`: Create a new token
-- `buyToken()`: Buy tokens from bonding curve
-- `sellToken()`: Sell tokens to bonding curve
+- `buyToken()`: Buy tokens (automatically handles migrated and non-migrated tokens)
+- `sellToken()`: Sell tokens (automatically handles migrated and non-migrated tokens)
 - `createAndBuyToken()`: Create and buy in one transaction
 
 **Key Features:**
 - Uses vanity addresses from `src/common/live_fan_addresses.json` for token creation
 - Returns serialized transactions ready for frontend signing
-- Integrates with Pump.fun SDK (`@pump-fun/pump-sdk`)
+- Integrates with Pump.fun SDK (`@pump-fun/pump-sdk`) for bonding curve operations
+- Integrates with PumpSwap SDK (`@pump-fun/pump-swap-sdk`) for migrated tokens on Raydium
+- **Automatic migration detection**: Buy/sell endpoints automatically detect if a token has migrated and use the appropriate SDK
 
 ### TransactionHistoryService
 

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Connection, Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import { PumpSdk, OnlinePumpSdk, getBuyTokenAmountFromSolAmount, getSellSolAmountFromTokenAmount } from '@pump-fun/pump-sdk';
+import { OnlinePumpAmmSdk, PUMP_AMM_SDK, canonicalPumpPoolPda } from '@pump-fun/pump-swap-sdk';
 import { ConfigService } from '@nestjs/config';
 import { VanityAddressManagerService } from './vanity-address-manager.service';
 import BN from 'bn.js';
@@ -42,6 +43,7 @@ export class TokenManagementService {
   private connection: Connection;
   private pumpSdk: PumpSdk;
   private onlinePumpSdk: OnlinePumpSdk;
+  private onlinePumpAmmSdk: OnlinePumpAmmSdk;
 
   constructor(
     private configService: ConfigService,
@@ -51,6 +53,7 @@ export class TokenManagementService {
     this.connection = new Connection(rpcUrl, 'confirmed');
     this.pumpSdk = new PumpSdk();
     this.onlinePumpSdk = new OnlinePumpSdk(this.connection);
+    this.onlinePumpAmmSdk = new OnlinePumpAmmSdk(this.connection);
   }
 
   /**
@@ -219,7 +222,7 @@ export class TokenManagementService {
   }
 
   /**
-   * Buy tokens from an existing Pump.fun token
+   * Buy tokens from an existing Pump.fun token (handles both migrated and non-migrated tokens)
    */
   async buyToken(
     walletPublicKey: string,
@@ -231,37 +234,73 @@ export class TokenManagementService {
       const walletPubkey = new PublicKey(walletPublicKey);
       const tokenMint = new PublicKey(request.tokenMint);
 
-      // Fetch global state
-      const global = await this.onlinePumpSdk.fetchGlobal();
-      if (!global) {
-        throw new Error('Failed to fetch Pump.fun global state');
-      }
-
       // Convert SOL amount to lamports
       const solAmountBN = new BN(Math.floor(request.solAmount * 1e9));
 
-      // Fetch buy state
-      const { bondingCurveAccountInfo, bondingCurve, associatedUserAccountInfo } = 
-        await this.onlinePumpSdk.fetchBuyState(tokenMint, walletPubkey);
+      // Check if token has migrated by fetching bonding curve
+      let bondingCurve;
+      let isMigrated = false;
+      try {
+        const { bondingCurve: bc } = await this.onlinePumpSdk.fetchBuyState(tokenMint, walletPubkey);
+        bondingCurve = bc;
+        isMigrated = bc?.complete === true;
+      } catch (error) {
+        // If bonding curve doesn't exist, token might be migrated or invalid
+        this.logger.warn(`Could not fetch bonding curve for ${request.tokenMint}, trying PumpSwap`);
+        isMigrated = true; // Assume migrated if bonding curve doesn't exist
+      }
 
-      // Create buy instructions
-      const instructions = await this.pumpSdk.buyInstructions({
-        global,
-        bondingCurveAccountInfo,
-        bondingCurve,
-        associatedUserAccountInfo,
-        mint: tokenMint,
-        user: walletPubkey,
-        solAmount: solAmountBN,
-        amount: getBuyTokenAmountFromSolAmount({
+      let instructions: any[];
+
+      // Check if token has migrated (bonding curve complete or doesn't exist)
+      if (isMigrated) {
+        this.logger.log(`Token ${request.tokenMint} has migrated to PumpSwap, using AMM`);
+        
+        // Use PumpSwap SDK for migrated tokens
+        const poolPda = canonicalPumpPoolPda(tokenMint);
+        
+        // Fetch swap state for PumpSwap
+        const swapState = await this.onlinePumpAmmSdk.swapSolanaState(
+          poolPda,
+          walletPubkey
+        );
+
+        // Build buy instructions using PumpSwap
+        instructions = await PUMP_AMM_SDK.buyQuoteInput(
+          swapState,
+          solAmountBN,
+          1 // 1% slippage
+        );
+      } else {
+        // Use Pump.fun SDK for non-migrated tokens
+        this.logger.log(`Token ${request.tokenMint} is on bonding curve, using Pump.fun`);
+        
+        const global = await this.onlinePumpSdk.fetchGlobal();
+        if (!global) {
+          throw new Error('Failed to fetch Pump.fun global state');
+        }
+
+        const { bondingCurveAccountInfo, bondingCurve: bc, associatedUserAccountInfo } = 
+          await this.onlinePumpSdk.fetchBuyState(tokenMint, walletPubkey);
+
+        instructions = await this.pumpSdk.buyInstructions({
           global,
-          bondingCurve,
-          amount: solAmountBN,
-          feeConfig: null,
-          mintSupply: null
-        }),
-        slippage: 1,
-      });
+          bondingCurveAccountInfo,
+          bondingCurve: bc,
+          associatedUserAccountInfo,
+          mint: tokenMint,
+          user: walletPubkey,
+          solAmount: solAmountBN,
+          amount: getBuyTokenAmountFromSolAmount({
+            global,
+            bondingCurve: bc,
+            amount: solAmountBN,
+            feeConfig: null,
+            mintSupply: null
+          }),
+          slippage: 1,
+        });
+      }
 
       // Create a new transaction
       const transaction = new Transaction();
@@ -295,7 +334,7 @@ export class TokenManagementService {
   }
 
   /**
-   * Sell tokens to Pump.fun bonding curve
+   * Sell tokens (handles both migrated and non-migrated tokens)
    */
   async sellToken(
     walletPublicKey: string,
@@ -306,12 +345,6 @@ export class TokenManagementService {
 
       const walletPubkey = new PublicKey(walletPublicKey);
       const tokenMint = new PublicKey(request.tokenMint);
-
-      // Fetch global state
-      const global = await this.onlinePumpSdk.fetchGlobal();
-      if (!global) {
-        throw new Error('Failed to fetch Pump.fun global state');
-      }
 
       // Get user's token balance
       const tokenBalance = await this.getTokenBalance(walletPubkey, tokenMint);
@@ -325,27 +358,71 @@ export class TokenManagementService {
         throw new Error('Invalid sell amount');
       }
 
-      // Fetch sell state
-      const { bondingCurveAccountInfo, bondingCurve } = 
-        await this.onlinePumpSdk.fetchSellState(tokenMint, walletPubkey);
+      const sellAmountBN = new BN(sellAmount);
 
-      // Create sell instructions
-      const instructions = await this.pumpSdk.sellInstructions({
-        global,
-        bondingCurveAccountInfo,
-        bondingCurve,
-        mint: tokenMint,
-        user: walletPubkey,
-        amount: new BN(sellAmount),
-        solAmount: getSellSolAmountFromTokenAmount({
+      // Check if token has migrated by fetching bonding curve
+      let bondingCurve;
+      let isMigrated = false;
+      try {
+        const { bondingCurve: bc } = await this.onlinePumpSdk.fetchSellState(tokenMint, walletPubkey);
+        bondingCurve = bc;
+        isMigrated = bc?.complete === true;
+      } catch (error) {
+        // If bonding curve doesn't exist, token might be migrated or invalid
+        this.logger.warn(`Could not fetch bonding curve for ${request.tokenMint}, trying PumpSwap`);
+        isMigrated = true; // Assume migrated if bonding curve doesn't exist
+      }
+
+      let instructions: any[];
+
+      // Check if token has migrated (bonding curve complete or doesn't exist)
+      if (isMigrated) {
+        this.logger.log(`Token ${request.tokenMint} has migrated to PumpSwap, using AMM`);
+        
+        // Use PumpSwap SDK for migrated tokens
+        const poolPda = canonicalPumpPoolPda(tokenMint);
+        
+        // Fetch swap state for PumpSwap
+        const swapState = await this.onlinePumpAmmSdk.swapSolanaState(
+          poolPda,
+          walletPubkey
+        );
+
+        // Build sell instructions using PumpSwap
+        instructions = await PUMP_AMM_SDK.sellBaseInput(
+          swapState,
+          sellAmountBN,
+          1 // 1% slippage
+        );
+      } else {
+        // Use Pump.fun SDK for non-migrated tokens
+        this.logger.log(`Token ${request.tokenMint} is on bonding curve, using Pump.fun`);
+        
+        const global = await this.onlinePumpSdk.fetchGlobal();
+        if (!global) {
+          throw new Error('Failed to fetch Pump.fun global state');
+        }
+
+        const { bondingCurveAccountInfo, bondingCurve: bc } = 
+          await this.onlinePumpSdk.fetchSellState(tokenMint, walletPubkey);
+
+        instructions = await this.pumpSdk.sellInstructions({
           global,
-          feeConfig: null,
-          mintSupply: null,
-          bondingCurve,
-          amount: new BN(sellAmount)
-        }),
-        slippage: 1,
-      });
+          bondingCurveAccountInfo,
+          bondingCurve: bc,
+          mint: tokenMint,
+          user: walletPubkey,
+          amount: sellAmountBN,
+          solAmount: getSellSolAmountFromTokenAmount({
+            global,
+            feeConfig: null,
+            mintSupply: null,
+            bondingCurve: bc,
+            amount: sellAmountBN
+          }),
+          slippage: 1,
+        });
+      }
 
       // Create a new transaction
       const transaction = new Transaction();
