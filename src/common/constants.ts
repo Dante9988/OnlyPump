@@ -2,9 +2,16 @@ import { PublicKey } from '@solana/web3.js';
 
 /**
  * Constants for Pump.fun and PumpSwap integration
+ * 
+ * Note: Program IDs are the SAME on both Devnet and Mainnet
+ * - Pump.fun: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
+ * - PumpSwap: pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA
+ * 
+ * The SDKs automatically use the correct network based on the RPC connection.
+ * Set SOLANA_RPC_URL to devnet or mainnet RPC endpoint.
  */
 
-// Program IDs
+// Program IDs (same on devnet and mainnet)
 export const PUMP_FUN_PROGRAM_ID = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
 export const PUMPSWAP_PROGRAM_ID = new PublicKey('pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA');
 

@@ -8,6 +8,7 @@ This document covers the NestJS backend API for OnlyPump, which provides a self-
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
+- [Devnet Testing](#devnet-testing)
 - [API Endpoints](#api-endpoints)
 - [Authentication](#authentication)
 - [Services](#services)
@@ -98,6 +99,40 @@ WALLET_PRIVATE_KEY=your_private_key_here
 
 - **Devnet**: `https://api.devnet.solana.com`
 - **Mainnet**: Use a high-performance RPC provider (e.g., Helius, QuickNode)
+
+### Program IDs
+
+**Important:** Pump.fun and PumpSwap use the **same program IDs** on both Devnet and Mainnet:
+
+- **Pump.fun**: `6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`
+- **PumpSwap**: `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`
+
+The SDKs automatically detect the network based on your RPC URL. No additional configuration needed.
+
+## Devnet Testing
+
+Before implementing authentication features, test all endpoints on devnet. See [DEVNET_TESTING.md](./DEVNET_TESTING.md) for a complete guide.
+
+### Quick Verification
+
+Run the verification script to check your devnet setup:
+
+```bash
+yarn verify-devnet
+```
+
+This will:
+- Verify RPC connection
+- Test Pump.fun SDK connectivity
+- Test PumpSwap SDK connectivity
+- Confirm program IDs are correct
+- Check program deployment status
+
+### Getting Devnet SOL
+
+Request devnet SOL from:
+- **Web**: https://faucet.solana.com/
+- **CLI**: `solana airdrop 2 YOUR_ADDRESS --url devnet`
 
 ## API Endpoints
 

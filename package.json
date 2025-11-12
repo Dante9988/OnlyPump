@@ -23,7 +23,8 @@
     "dapp": "ts-node src/examples/web-dapp-example.ts",
     "dapp:test": "dotenv -e env.test -- ts-node src/examples/web-dapp-example.ts",
     "generate-signature": "node scripts/generate-signature.js",
-    "test-signature": "node scripts/test-signature.js"
+    "test-signature": "node scripts/test-signature.js",
+    "verify-devnet": "node scripts/verify-devnet-setup.js"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
