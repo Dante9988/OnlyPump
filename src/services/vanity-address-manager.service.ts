@@ -97,12 +97,20 @@ export class VanityAddressManagerService {
           const bs58Module = require('bs58');
           const bs58 = bs58Module.default || bs58Module;
           const privateKeyBytes = bs58.decode(keypairData.private_key);
-          
-          // Solana keypairs are 64 bytes, use first 32 for secret key
-          const secretKey = privateKeyBytes.length === 64 
-            ? new Uint8Array(privateKeyBytes.slice(0, 32))
-            : new Uint8Array(privateKeyBytes);
-          
+
+          /**
+           * The JSON `private_key` field is a standard Solana secret key:
+           * a 64-byte Ed25519 secret key (private + public) encoded in base58.
+           * `Keypair.fromSecretKey` expects the full 64-byte secret key.
+           */
+          if (privateKeyBytes.length !== 64) {
+            this.logger.error(
+              `Unexpected secret key length for ${keypairData.public_key}: ${privateKeyBytes.length} bytes (expected 64)`,
+            );
+            continue;
+          }
+
+          const secretKey = new Uint8Array(privateKeyBytes);
           const keypair = Keypair.fromSecretKey(secretKey);
           
           // Verify public key matches
