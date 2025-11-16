@@ -26,6 +26,7 @@ export class TokenManagementController {
   })
   @ApiBody({ type: BuyTokenDto })
   @ApiResponse({ status: 200, description: 'Token buy transaction prepared', type: TransactionResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid trade size or slippage parameters' })
   async buyToken(
     @Req() req: Request,
     @Body() dto: BuyTokenDto,
@@ -35,12 +36,31 @@ export class TokenManagementController {
     const request: BuyTokenRequest = {
       tokenMint: dto.tokenMint,
       solAmount: dto.solAmount,
+      slippageBps: dto.slippageBps,
     };
 
     const result = await this.tokenManagementService.buyToken(walletAddress, request);
     
     if (!result.success || !result.txId) {
-      throw new Error(result.error || 'Failed to prepare buy transaction');
+      const errorMsg = result.error || 'Failed to prepare buy transaction';
+      
+      // Check if it's a validation error (trade size or slippage)
+      const isValidationError = 
+        errorMsg.includes('exceeds maximum') ||
+        errorMsg.includes('Slippage tolerance too low') ||
+        errorMsg.includes('price impact') ||
+        errorMsg.includes('reduce trade size');
+
+      const statusCode = isValidationError ? 400 : 500;
+      
+      throw new HttpException(
+        {
+          message: errorMsg,
+          error: isValidationError ? 'Trade Validation Failed' : 'Buy Transaction Failed',
+          statusCode,
+        },
+        statusCode,
+      );
     }
 
     // Record transaction in history (will be updated when transaction is confirmed)
@@ -68,6 +88,7 @@ export class TokenManagementController {
   })
   @ApiBody({ type: SellTokenDto })
   @ApiResponse({ status: 200, description: 'Token sell transaction prepared', type: TransactionResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid trade size, slippage, or insufficient balance' })
   async sellToken(
     @Req() req: Request,
     @Body() dto: SellTokenDto,
@@ -86,22 +107,26 @@ export class TokenManagementController {
     const result = await this.tokenManagementService.sellToken(walletAddress, request);
     
     if (!result.success || !result.txId) {
-      const message = result.error || 'Failed to prepare sell transaction';
-      // Map common user-facing errors to 400 instead of 500
-      const isUserInputError =
-        message.includes('No tokens found') ||
-        message.includes('Invalid sell amount') ||
-        message.toLowerCase().includes('slippage');
+      const errorMsg = result.error || 'Failed to prepare sell transaction';
+      
+      // Check if it's a validation error (trade size, slippage, or user input)
+      const isValidationError =
+        errorMsg.includes('No tokens found') ||
+        errorMsg.includes('Invalid sell amount') ||
+        errorMsg.includes('exceeds maximum') ||
+        errorMsg.includes('Slippage tolerance too low') ||
+        errorMsg.includes('price impact') ||
+        errorMsg.includes('reduce sell percentage');
 
-      const status = isUserInputError ? 400 : 500;
+      const statusCode = isValidationError ? 400 : 500;
 
       throw new HttpException(
         {
-          message,
-          error: 'Sell Transaction Preparation Failed',
-          statusCode: status,
+          message: errorMsg,
+          error: isValidationError ? 'Trade Validation Failed' : 'Sell Transaction Failed',
+          statusCode,
         },
-        status,
+        statusCode,
       );
     }
 
