@@ -18,9 +18,11 @@ This document covers the NestJS backend API for OnlyPump, which provides a self-
 ## Overview
 
 The NestJS backend provides RESTful APIs for:
-- **Token Management**: Create, buy, and sell tokens on Pump.fun
+- **Token Management**: Create, buy, and sell tokens on Pump.fun and PumpSwap (Raydium)
 - **Transaction History**: Track and query user transactions
 - **Wallet Authentication**: Self-custody authentication using wallet signatures
+- **Jito Integration**: MEV-protected transactions with priority fee support
+- **Transaction Speed Control**: Configure transaction priority (NORMAL, FAST, TURBO)
 
 All token operations return serialized transactions that must be signed by the user's wallet on the frontend before being sent to the Solana blockchain.
 
@@ -43,7 +45,15 @@ src/
 │   ├── token-management.service.ts
 │   ├── transaction-history.service.ts
 │   ├── wallet-auth.service.ts
-│   └── vanity-address-manager.service.ts
+│   ├── vanity-address-manager.service.ts
+│   ├── jito.service.ts
+│   ├── encryption.service.ts
+│   ├── vanity-address.service.ts
+│   ├── simple-vanity-address.service.ts
+│   └── advanced-vanity-address.service.ts
+├── interfaces/               # TypeScript interfaces
+│   ├── pump-fun.interface.ts
+│   └── wallet.interface.ts
 ├── common/                   # Shared resources
 │   └── live_fan_addresses.json  # Vanity addresses for token creation
 ├── app.module.ts            # Root module
@@ -93,6 +103,15 @@ PORT=3000
 
 # Optional: Wallet private key for backend operations
 WALLET_PRIVATE_KEY=your_private_key_here
+
+# Jito Configuration (for MEV-protected transactions)
+JITO_ENDPOINT=https://mainnet.block-engine.jito.wtf/api/v1
+JITO_UUID=your_jito_uuid_here
+
+# Transaction Priority Fees (in microlamports per compute unit)
+PRIORITY_FEE_NORMAL=10000
+PRIORITY_FEE_FAST=50000
+PRIORITY_FEE_TURBO=100000
 ```
 
 ### RPC URLs
@@ -180,9 +199,17 @@ Headers:
 Body:
   {
     "tokenMint": "token_mint_address",
-    "solAmount": 0.1
+    "solAmount": 0.1,
+    "slippageBps": 500,
+    "speed": "fast"
   }
 ```
+
+**Parameters:**
+- `tokenMint` (required): Token mint address
+- `solAmount` (required): Amount of SOL to spend
+- `slippageBps` (optional): Slippage tolerance in basis points (default: 500 = 5%)
+- `speed` (optional): Transaction speed - "normal", "fast", or "turbo" (default: "normal")
 
 **Response:**
 ```json
@@ -207,9 +234,17 @@ Headers:
 Body:
   {
     "tokenMint": "token_mint_address",
-    "percentage": 50
+    "percentage": 50,
+    "slippageBps": 500,
+    "speed": "fast"
   }
 ```
+
+**Parameters:**
+- `tokenMint` (required): Token mint address
+- `percentage` (required): Percentage of tokens to sell (1-100)
+- `slippageBps` (optional): Slippage tolerance in basis points (default: 500 = 5%)
+- `speed` (optional): Transaction speed - "normal", "fast", or "turbo" (default: "normal")
 
 **Response:**
 ```json
@@ -380,9 +415,12 @@ Handles all Pump.fun and PumpSwap token operations:
 **Key Features:**
 - Uses vanity addresses from `src/common/live_fan_addresses.json` for token creation
 - Returns serialized transactions ready for frontend signing
-- Integrates with Pump.fun SDK (`@pump-fun/pump-sdk`) for bonding curve operations
-- Integrates with PumpSwap SDK (`@pump-fun/pump-swap-sdk`) for migrated tokens on Raydium
+- Integrates with Pump.fun SDK (`@pump-fun/pump-sdk` v1.21.0) for bonding curve operations
+- Integrates with PumpSwap SDK (`@pump-fun/pump-swap-sdk` v1.10.0) for migrated tokens on Raydium
 - **Automatic migration detection**: Buy/sell endpoints automatically detect if a token has migrated and use the appropriate SDK
+- **Priority fee support**: Configurable transaction speed (NORMAL, FAST, TURBO)
+- **Slippage control**: Customizable slippage tolerance in basis points
+- **Jito integration**: Optional MEV-protected transactions
 
 ### TransactionHistoryService
 
@@ -406,6 +444,33 @@ Manages vanity addresses for token creation:
 - Loads addresses from `src/common/live_fan_addresses.json`
 - Tracks used addresses
 - Provides available addresses for token creation
+
+### JitoService
+
+Handles MEV-protected transaction submission via Jito:
+- `getRandomTipAccount()`: Get a random Jito tip account for MEV protection
+- `sendBundle()`: Submit transaction bundles with tip instructions
+- `getTipInstruction()`: Create tip instructions for priority execution
+- Integrates with `jito-js-rpc` for mainnet MEV protection
+
+**Features:**
+- Protects transactions from front-running and sandwich attacks
+- Supports configurable tip amounts for priority execution
+- Provides fallback to standard RPC if Jito unavailable
+
+### EncryptionService
+
+Handles secure data encryption and decryption:
+- Encrypts sensitive data like private keys
+- Supports secure key management
+- Used for wallet and vanity address encryption
+
+### VanityAddressService, SimpleVanityAddressService, AdvancedVanityAddressService
+
+Multiple vanity address generation services:
+- Generate custom vanity addresses with specific prefixes
+- Support for parallel generation
+- Configurable difficulty and patterns
 
 ## Running the Application
 
@@ -474,6 +539,29 @@ This will:
      }'
    ```
 
+### Testing Scripts
+
+Several test scripts are available for testing token operations:
+
+```bash
+# Test buy functionality
+yarn test-buy
+
+# Test sell functionality
+yarn test-sell
+
+# Test both buy and sell operations
+yarn test-buy-sell
+```
+
+These scripts test:
+- Buying tokens on bonding curve
+- Buying tokens on migrated pools (PumpSwap/Raydium)
+- Selling tokens on bonding curve
+- Selling tokens on migrated pools
+- Transaction speed options
+- Slippage configurations
+
 ### Postman Collection
 
 Import the API endpoints into Postman:
@@ -502,12 +590,55 @@ Data Transfer Objects for request/response validation:
 - `CreateTokenDto`, `BuyTokenDto`, `SellTokenDto`
 - `TransactionResponseDto`, `TransactionRecordDto`, `WalletStatsDto`
 
+## Transaction Speed and Priority Fees
+
+The API supports three transaction speed levels:
+
+### Speed Options
+
+- **NORMAL** (default): Standard priority fee (~10,000 microlamports/CU)
+- **FAST**: Higher priority fee (~50,000 microlamports/CU)
+- **TURBO**: Maximum priority fee (~100,000 microlamports/CU)
+
+### Slippage Configuration
+
+Slippage is specified in basis points (bps):
+- **100 bps** = 1%
+- **500 bps** = 5% (default)
+- **1000 bps** = 10%
+
+Presets available:
+- `SlippagePreset.LOW` = 100 bps (1%)
+- `SlippagePreset.MEDIUM` = 500 bps (5%)
+- `SlippagePreset.HIGH` = 1000 bps (10%)
+- `SlippagePreset.VERY_HIGH` = 2000 bps (20%)
+
+## MEV Protection with Jito
+
+For mainnet operations, the service supports Jito integration to protect against MEV attacks:
+
+1. Set `JITO_ENDPOINT` and `JITO_UUID` in environment variables
+2. Transactions can be bundled with tip instructions
+3. Protects against front-running and sandwich attacks
+4. Ensures priority execution during high network congestion
+
+## SDK Versions
+
+Current SDK versions used:
+- `@pump-fun/pump-sdk`: **1.21.0**
+- `@pump-fun/pump-swap-sdk`: **1.10.0**
+- `@solana/web3.js`: **1.95.5**
+- `jito-js-rpc`: **0.2.2**
+
 ## Notes
 
 - **Devnet vs Mainnet**: Configure via `SOLANA_RPC_URL` environment variable
 - **Vanity Addresses**: Only used for token creation, loaded from JSON file
 - **Transaction Serialization**: All transactions are returned as base64 strings for frontend signing
 - **Self-Custody**: Users always sign transactions with their own wallet - backend never holds private keys
+- **Automatic Migration Detection**: Buy/sell endpoints automatically detect migrated tokens and use appropriate SDK
+- **Priority Fees**: Configurable via environment variables or per-request speed parameter
+- **Jito Support**: Optional MEV protection for mainnet transactions
 
 ## Troubleshooting
 

@@ -9,6 +9,7 @@ import { createComputeBudgetInstruction } from '../utils/transaction.utils';
 import { TransactionSpeed } from '../interfaces/pump-fun.interface';
 import BN from 'bn.js';
 import { TOKEN_PROGRAM_ID } from '../common/constants';
+import { validateBuyAmount, validateSellAmount, calculateRecommendedSlippage, calculateTradeLimits } from '../utils/bonding-curve.utils';
 
 export interface CreateTokenRequest {
   name: string;
@@ -250,7 +251,7 @@ export class TokenManagementService {
       // Determine slippage tolerance for buys (default: 5% = 500 bps)
       const buySlippageBps = request.slippageBps ?? 500;
       const maxBuySlippageBps = Math.min(buySlippageBps, 10000); // Cap at 100% for safety
-      const buySdkSlippage = maxBuySlippageBps / 100; // Pump SDK expects percentage (e.g. 5 = 5%)
+      let buySdkSlippage = maxBuySlippageBps / 100; // Pump SDK expects percentage (e.g. 5 = 5%)
       this.logger.log(
         `Using buy slippage tolerance: ${maxBuySlippageBps} basis points (${buySdkSlippage}%)`,
       );
@@ -300,6 +301,32 @@ export class TokenManagementService {
 
         const { bondingCurveAccountInfo, bondingCurve: bc, associatedUserAccountInfo } = 
           await this.onlinePumpSdk.fetchBuyState(tokenMint, walletPubkey);
+
+        // VALIDATE TRADE SIZE AGAINST BONDING CURVE LIMITS
+        const validation = validateBuyAmount(request.solAmount, bc);
+        if (!validation.valid) {
+          this.logger.error(`Buy validation failed: ${validation.error}`);
+          throw new Error(validation.error);
+        }
+
+        // Log trade limits and price impact
+        if (validation.limits) {
+          this.logger.log(`Trade limits: max=${validation.limits.recommendedMaxBuySOL.toFixed(4)} SOL, liquidity=${validation.limits.liquiditySOL.toFixed(2)} SOL, impact=${validation.limits.priceImpactPercentage.toFixed(2)}%`);
+          
+          // Adjust slippage based on price impact if user didn't specify custom slippage
+          if (!request.slippageBps) {
+            const recommendedSlippage = calculateRecommendedSlippage(validation.limits.priceImpactPercentage);
+            if (recommendedSlippage > buySlippageBps) {
+              this.logger.log(`Increasing slippage from ${buySlippageBps} to ${recommendedSlippage} bps due to ${validation.limits.priceImpactPercentage.toFixed(2)}% price impact`);
+              buySdkSlippage = recommendedSlippage / 100;
+            }
+          }
+        }
+
+        // Log warning if validation returned one
+        if (validation.error) {
+          this.logger.warn(validation.error);
+        }
 
         instructions = await this.pumpSdk.buyInstructions({
           global,
@@ -404,7 +431,7 @@ export class TokenManagementService {
       // Sells are more sensitive to price movements, so we use a higher default
       const slippageBps = request.slippageBps ?? 1000; // Default 10% slippage for sells
       // Respect user-provided slippage up to 100% (10000 bps). Higher than this is clamped for safety.
-      const maxSlippageBps = Math.min(slippageBps, 10000); // Cap at 100% for extremely volatile markets
+      let maxSlippageBps = Math.min(slippageBps, 10000); // Cap at 100% for extremely volatile markets
       this.logger.log(`Using slippage tolerance: ${maxSlippageBps} basis points (${maxSlippageBps / 100}%)`);
 
       // Check if token has migrated (bonding curve complete or doesn't exist)
@@ -437,6 +464,32 @@ export class TokenManagementService {
 
         const { bondingCurveAccountInfo, bondingCurve: bc } = 
           await this.onlinePumpSdk.fetchSellState(tokenMint, walletPubkey);
+
+        // VALIDATE TRADE SIZE AGAINST BONDING CURVE LIMITS
+        const validation = validateSellAmount(sellAmount, bc);
+        if (!validation.valid) {
+          this.logger.error(`Sell validation failed: ${validation.error}`);
+          throw new Error(validation.error);
+        }
+
+        // Log trade limits and price impact
+        if (validation.limits) {
+          this.logger.log(`Trade limits: max=${validation.limits.recommendedMaxSellTokens.toLocaleString()} tokens, liquidity=${validation.limits.liquiditySOL.toFixed(2)} SOL, impact=${validation.limits.priceImpactPercentage.toFixed(2)}%`);
+          
+          // Adjust slippage based on price impact if user didn't specify custom slippage
+          if (!request.slippageBps) {
+            const recommendedSlippage = calculateRecommendedSlippage(validation.limits.priceImpactPercentage, 1000);
+            if (recommendedSlippage > maxSlippageBps) {
+              this.logger.log(`Increasing slippage from ${maxSlippageBps} to ${recommendedSlippage} bps due to ${validation.limits.priceImpactPercentage.toFixed(2)}% price impact`);
+              maxSlippageBps = recommendedSlippage;
+            }
+          }
+        }
+
+        // Log warning if validation returned one
+        if (validation.error) {
+          this.logger.warn(validation.error);
+        }
 
         // Calculate expected SOL out using Pump SDK's pricing helper
         const expectedSolAmount = getSellSolAmountFromTokenAmount({
@@ -517,6 +570,65 @@ export class TokenManagementService {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error selling token'
       };
+    }
+  }
+
+  /**
+   * Get current trade limits for a token
+   * Returns max buy/sell amounts based on bonding curve liquidity
+   */
+  async getTradeLimits(tokenMint: string): Promise<{
+    maxBuySOL: number;
+    recommendedMaxBuySOL: number;
+    maxSellTokens: number;
+    recommendedMaxSellTokens: number;
+    liquiditySOL: number;
+    isMigrated: boolean;
+    tokenMint: string;
+  }> {
+    try {
+      const mint = new PublicKey(tokenMint);
+
+      // Check if token has migrated
+      let isMigrated = false;
+      try {
+        const { bondingCurve: bc } = await this.onlinePumpSdk.fetchBuyState(
+          mint,
+          new PublicKey('11111111111111111111111111111111') // Dummy wallet for query
+        );
+        isMigrated = bc?.complete === true;
+
+        if (!isMigrated && bc) {
+          // Calculate limits for non-migrated token
+          const limits = calculateTradeLimits(bc);
+          return {
+            maxBuySOL: limits.maxBuySOL,
+            recommendedMaxBuySOL: limits.recommendedMaxBuySOL,
+            maxSellTokens: limits.maxSellTokens,
+            recommendedMaxSellTokens: limits.recommendedMaxSellTokens,
+            liquiditySOL: limits.liquiditySOL,
+            isMigrated: false,
+            tokenMint,
+          };
+        }
+      } catch (error) {
+        // If bonding curve doesn't exist, token is migrated
+        isMigrated = true;
+      }
+
+      // For migrated tokens, return large limits (PumpSwap has its own AMM logic)
+      return {
+        maxBuySOL: 1000000, // Effectively unlimited for AMM
+        recommendedMaxBuySOL: 1000000,
+        maxSellTokens: 1e15, // Effectively unlimited
+        recommendedMaxSellTokens: 1e15,
+        liquiditySOL: 0, // Would need to query PumpSwap pool
+        isMigrated: true,
+        tokenMint,
+      };
+    } catch (error: any) {
+      this.logger.error(`Error fetching trade limits for ${tokenMint}:`, error);
+      throw new Error(`Failed to fetch trade limits: ${error.message}`);
     }
   }
 

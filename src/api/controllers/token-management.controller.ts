@@ -154,6 +154,26 @@ export class TokenManagementController {
     };
   }
 
+  @Get(':tokenMint/trade-limits')
+  @ApiOperation({ 
+    summary: 'Get current trade limits for a token',
+    description: 'Returns maximum buy/sell amounts based on current bonding curve liquidity. Use this to show users the max trade size before they attempt a transaction.',
+  })
+  @ApiResponse({ status: 200, description: 'Trade limits retrieved successfully' })
+  async getTradeLimits(
+    @Param('tokenMint') tokenMint: string,
+  ): Promise<{
+    maxBuySOL: number;
+    recommendedMaxBuySOL: number;
+    maxSellTokens: number;
+    recommendedMaxSellTokens: number;
+    liquiditySOL: number;
+    isMigrated: boolean;
+    tokenMint: string;
+  }> {
+    return await this.tokenManagementService.getTradeLimits(tokenMint);
+  }
+
   @Post('create-and-buy')
   @ApiOperation({ summary: 'Create and buy a token in one transaction' })
   @ApiBody({ type: CreateTokenDto })
