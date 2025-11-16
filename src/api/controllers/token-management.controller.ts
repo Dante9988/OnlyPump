@@ -44,19 +44,15 @@ export class TokenManagementController {
     if (!result.success || !result.txId) {
       const errorMsg = result.error || 'Failed to prepare buy transaction';
       
-      // Check if it's a validation error (trade size or slippage)
-      const isValidationError = 
-        errorMsg.includes('exceeds maximum') ||
-        errorMsg.includes('Slippage tolerance too low') ||
-        errorMsg.includes('price impact') ||
-        errorMsg.includes('reduce trade size');
+      // Check if it's a slippage validation error
+      const isSlippageError = errorMsg.includes('Slippage tolerance too low');
 
-      const statusCode = isValidationError ? 400 : 500;
+      const statusCode = isSlippageError ? 400 : 500;
       
       throw new HttpException(
         {
           message: errorMsg,
-          error: isValidationError ? 'Trade Validation Failed' : 'Buy Transaction Failed',
+          error: isSlippageError ? 'Slippage Validation Failed' : 'Buy Transaction Failed',
           statusCode,
         },
         statusCode,
@@ -109,14 +105,11 @@ export class TokenManagementController {
     if (!result.success || !result.txId) {
       const errorMsg = result.error || 'Failed to prepare sell transaction';
       
-      // Check if it's a validation error (trade size, slippage, or user input)
+      // Check if it's a validation error (slippage or user input)
       const isValidationError =
         errorMsg.includes('No tokens found') ||
         errorMsg.includes('Invalid sell amount') ||
-        errorMsg.includes('exceeds maximum') ||
-        errorMsg.includes('Slippage tolerance too low') ||
-        errorMsg.includes('price impact') ||
-        errorMsg.includes('reduce sell percentage');
+        errorMsg.includes('Slippage tolerance too low');
 
       const statusCode = isValidationError ? 400 : 500;
 
