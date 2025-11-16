@@ -26,6 +26,7 @@ export interface CreateAndBuyTokenRequest extends CreateTokenRequest {
 export interface BuyTokenRequest {
   tokenMint: string;
   solAmount: number;
+  slippageBps?: number; // Slippage in basis points (default: 500 = 5%)
 }
 
 export interface SellTokenRequest {
@@ -246,6 +247,14 @@ export class TokenManagementService {
       // Convert SOL amount to lamports
       const solAmountBN = new BN(Math.floor(request.solAmount * 1e9));
 
+      // Determine slippage tolerance for buys (default: 5% = 500 bps)
+      const buySlippageBps = request.slippageBps ?? 500;
+      const maxBuySlippageBps = Math.min(buySlippageBps, 10000); // Cap at 100% for safety
+      const buySdkSlippage = maxBuySlippageBps / 100; // Pump SDK expects percentage (e.g. 5 = 5%)
+      this.logger.log(
+        `Using buy slippage tolerance: ${maxBuySlippageBps} basis points (${buySdkSlippage}%)`,
+      );
+
       // Check if token has migrated by fetching bonding curve
       let bondingCurve;
       let isMigrated = false;
@@ -274,12 +283,11 @@ export class TokenManagementService {
           walletPubkey
         );
 
-        // Build buy instructions using PumpSwap
-        // Use 5% slippage to account for price movement between transaction creation and submission
+        // Build buy instructions using PumpSwap with configurable slippage
         instructions = await PUMP_AMM_SDK.buyQuoteInput(
           swapState,
           solAmountBN,
-          5 // 5% slippage
+          buySdkSlippage
         );
       } else {
         // Use Pump.fun SDK for non-migrated tokens
@@ -308,7 +316,8 @@ export class TokenManagementService {
             feeConfig: null,
             mintSupply: null,
           }),
-          slippage: 5, // 5% slippage to account for price movement
+          slippage: buySdkSlippage,
+          tokenProgram: TOKEN_PROGRAM_ID,
         });
       }
 
@@ -457,6 +466,8 @@ export class TokenManagementService {
           amount: sellAmountBN,
           solAmount: expectedSolAmount,
           slippage: sdkSlippage,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          mayhemMode: false,
         });
       }
 
