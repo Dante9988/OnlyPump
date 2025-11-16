@@ -50,6 +50,22 @@ export class TransactionHistoryService {
     // Generate a temporary ID if signature is not provided
     const pending_id = transactionSignature || `pending-${Date.now()}-${Math.random()}`;
     
+    // Check if Supabase is configured
+    if (!this.supabase.isConfigured()) {
+      this.logger.warn('Supabase not configured, transaction not stored in database');
+      return {
+        id: pending_id,
+        walletAddress,
+        transactionSignature: transactionSignature || pending_id,
+        type,
+        tokenMint,
+        solAmount,
+        tokenAmount,
+        timestamp: new Date(),
+        status: 'pending',
+      };
+    }
+    
     try {
       // Store in Supabase
       const dbRecord = await this.supabase.createTransaction({
@@ -110,6 +126,12 @@ export class TransactionHistoryService {
     pendingId: string,
     transactionSignature: string,
   ): Promise<TransactionRecord | null> {
+    // Check if Supabase is configured
+    if (!this.supabase.isConfigured()) {
+      this.logger.warn('Supabase not configured, transaction signature not updated in database');
+      return null;
+    }
+    
     try {
       // Update in database
       const dbRecord = await this.supabase.updateTransaction(pendingId, {

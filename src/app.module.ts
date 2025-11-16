@@ -10,6 +10,7 @@ import { WalletAuthService } from './services/wallet-auth.service';
 import { TransactionHistoryService } from './services/transaction-history.service';
 import { VanityAddressManagerService } from './services/vanity-address-manager.service';
 import { SupabaseService } from './services/supabase.service';
+import { PriceService } from './services/price.service';
 import { WalletMiddleware } from './api/middleware/wallet.middleware';
 import supabaseConfig from './config/supabase.config';
 
@@ -31,6 +32,7 @@ import supabaseConfig from './config/supabase.config';
     WalletAuthService,
     VanityAddressManagerService,
     SupabaseService,
+    PriceService,
     {
       provide: Connection,
       useFactory: (configService: ConfigService) => {

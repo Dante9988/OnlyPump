@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader } from '@nestjs/
 import { Request } from 'express';
 import { TokenManagementService, CreateTokenRequest, CreateAndBuyTokenRequest, BuyTokenRequest, SellTokenRequest } from '../../services/token-management.service';
 import { TransactionHistoryService, TransactionType } from '../../services/transaction-history.service';
+import { PriceService } from '../../services/price.service';
+import { SupabaseService } from '../../services/supabase.service';
 import { TransactionResponseDto, SubmitSignedTransactionDto, SubmitTransactionResponseDto } from '../dto/transaction.dto';
 import { CreateTokenDto, BuyTokenDto, SellTokenDto } from '../dto/token.dto';
 
@@ -17,6 +19,8 @@ export class TokenManagementController {
   constructor(
     private readonly tokenManagementService: TokenManagementService,
     private readonly transactionHistoryService: TransactionHistoryService,
+    private readonly priceService: PriceService,
+    private readonly supabaseService: SupabaseService,
   ) {}
 
   @Post('buy')
@@ -33,6 +37,40 @@ export class TokenManagementController {
   ): Promise<TransactionResponseDto> {
     const walletAddress = (req as any).walletAddress;
     
+    // Validate input
+    if (!dto.tokenMint || dto.tokenMint.trim() === '') {
+      throw new HttpException(
+        {
+          message: 'Token mint address is required',
+          error: 'Validation Failed',
+          statusCode: 400,
+        },
+        400,
+      );
+    }
+
+    if (!dto.solAmount || dto.solAmount <= 0) {
+      throw new HttpException(
+        {
+          message: 'SOL amount must be greater than 0',
+          error: 'Validation Failed',
+          statusCode: 400,
+        },
+        400,
+      );
+    }
+
+    if (dto.solAmount > 1000) {
+      throw new HttpException(
+        {
+          message: 'SOL amount too large. Maximum 1000 SOL per transaction.',
+          error: 'Validation Failed',
+          statusCode: 400,
+        },
+        400,
+      );
+    }
+    
     const request: BuyTokenRequest = {
       tokenMint: dto.tokenMint,
       solAmount: dto.solAmount,
@@ -44,22 +82,28 @@ export class TokenManagementController {
     if (!result.success || !result.txId) {
       const errorMsg = result.error || 'Failed to prepare buy transaction';
       
-      // Check if it's a slippage validation error
-      const isSlippageError = errorMsg.includes('Slippage tolerance too low');
+      // Check if it's a user input error (return 400)
+      const isUserError = 
+        errorMsg.includes('Slippage tolerance too low') ||
+        errorMsg.includes('Invalid public key') ||
+        errorMsg.includes('Token not found') ||
+        errorMsg.includes('bonding curve') ||
+        errorMsg.toLowerCase().includes('invalid');
 
-      const statusCode = isSlippageError ? 400 : 500;
+      const statusCode = isUserError ? 400 : 500;
       
+      // Don't record failed transactions in DB
       throw new HttpException(
         {
           message: errorMsg,
-          error: isSlippageError ? 'Slippage Validation Failed' : 'Buy Transaction Failed',
+          error: isUserError ? 'Validation Failed' : 'Buy Transaction Failed',
           statusCode,
         },
         statusCode,
       );
     }
 
-    // Record transaction in history (will be updated when transaction is confirmed)
+    // Only record transaction if it was successfully prepared
     const pendingRecord = await this.transactionHistoryService.recordTransaction(
       walletAddress,
       '', // Will be updated after user signs and sends
@@ -68,6 +112,12 @@ export class TokenManagementController {
       dto.solAmount,
     );
 
+    // Update token price in background (don't wait for it)
+    this.updateTokenPriceInBackground(dto.tokenMint).catch((error) => {
+      // Log but don't fail the request
+      console.error(`Failed to update token price for ${dto.tokenMint}:`, error);
+    });
+
     return {
       transaction: result.txId,
       pendingTransactionId: pendingRecord.id,
@@ -75,6 +125,48 @@ export class TokenManagementController {
       type: TransactionType.BUY,
       solAmount: dto.solAmount,
     };
+  }
+
+  /**
+   * Update token price in database (called in background)
+   */
+  private async updateTokenPriceInBackground(tokenMint: string): Promise<void> {
+    if (!this.supabaseService.isConfigured()) {
+      return;
+    }
+
+    try {
+      // Check if token exists in database first
+      const existingToken = await this.supabaseService.getToken(tokenMint);
+      if (!existingToken) {
+        // Token not in our database (created elsewhere), skip price update
+        return;
+      }
+
+      const priceData = await this.priceService.getTokenPriceData(tokenMint);
+      
+      if (!priceData) {
+        return;
+      }
+
+      // Cap values to prevent database overflow
+      // DECIMAL(30, 9) can store up to ~10^21, but we'll cap at reasonable values
+      const MAX_MARKET_CAP = 1e12; // 1 trillion
+      const MAX_PRICE = 1e6; // 1 million SOL per token (very high)
+      const MAX_VOLUME = 1e10; // 10 billion
+      
+      await this.supabaseService.updateTokenPrice(tokenMint, {
+        price_sol: Math.min(priceData.priceSol, MAX_PRICE),
+        price_usd: Math.min(priceData.priceUsd, MAX_PRICE * 200), // Assuming max SOL price ~$200
+        market_cap_sol: Math.min(priceData.marketCapSol, MAX_MARKET_CAP),
+        market_cap_usd: Math.min(priceData.marketCapUsd, MAX_MARKET_CAP * 200),
+        volume_24h_sol: Math.min(priceData.volume24hSol, MAX_VOLUME),
+        volume_24h_usd: Math.min(priceData.volume24hUsd, MAX_VOLUME * 200),
+        holders_count: priceData.holders,
+      });
+    } catch (error) {
+      console.error(`Error updating token price for ${tokenMint}:`, error);
+    }
   }
 
   @Post('sell')
@@ -91,6 +183,29 @@ export class TokenManagementController {
   ): Promise<TransactionResponseDto> {
     const walletAddress = (req as any).walletAddress;
     
+    // Validate input
+    if (!dto.tokenMint || dto.tokenMint.trim() === '') {
+      throw new HttpException(
+        {
+          message: 'Token mint address is required',
+          error: 'Validation Failed',
+          statusCode: 400,
+        },
+        400,
+      );
+    }
+
+    if (!dto.percentage || dto.percentage <= 0 || dto.percentage > 100) {
+      throw new HttpException(
+        {
+          message: 'Percentage must be between 1 and 100',
+          error: 'Validation Failed',
+          statusCode: 400,
+        },
+        400,
+      );
+    }
+    
     const request: SellTokenRequest = {
       tokenMint: dto.tokenMint,
       percentage: dto.percentage,
@@ -105,37 +220,50 @@ export class TokenManagementController {
     if (!result.success || !result.txId) {
       const errorMsg = result.error || 'Failed to prepare sell transaction';
       
-      // Check if it's a validation error (slippage or user input)
-      const isValidationError =
+      // Check if it's a user input error (return 400)
+      const isUserError =
         errorMsg.includes('No tokens found') ||
         errorMsg.includes('Invalid sell amount') ||
-        errorMsg.includes('Slippage tolerance too low');
+        errorMsg.includes('Slippage tolerance too low') ||
+        errorMsg.includes('Invalid public key') ||
+        errorMsg.includes('Token not found') ||
+        errorMsg.includes('bonding curve') ||
+        errorMsg.toLowerCase().includes('invalid');
 
-      const statusCode = isValidationError ? 400 : 500;
+      const statusCode = isUserError ? 400 : 500;
 
+      // Don't record failed transactions in DB
       throw new HttpException(
         {
           message: errorMsg,
-          error: isValidationError ? 'Trade Validation Failed' : 'Sell Transaction Failed',
+          error: isUserError ? 'Validation Failed' : 'Sell Transaction Failed',
           statusCode,
         },
         statusCode,
       );
     }
 
-    // Record transaction in history
+    // Only record transaction if it was successfully prepared
     const pendingRecord = await this.transactionHistoryService.recordTransaction(
       walletAddress,
       '', // Will be updated after user signs and sends
       TransactionType.SELL,
       dto.tokenMint,
+      undefined, // solAmount (filled on confirmation)
+      result.tokenAmount, // Number of tokens being sold
     );
+
+    // Update token price in background (don't wait for it)
+    this.updateTokenPriceInBackground(dto.tokenMint).catch((error) => {
+      console.error(`Failed to update token price for ${dto.tokenMint}:`, error);
+    });
 
     return {
       transaction: result.txId,
       pendingTransactionId: pendingRecord.id,
       tokenMint: result.tokenMint,
       type: TransactionType.SELL,
+      tokenAmount: result.tokenAmount, // Include in response
     };
   }
 
@@ -143,11 +271,25 @@ export class TokenManagementController {
   @ApiOperation({ summary: 'Create a new token on Pump.fun' })
   @ApiBody({ type: CreateTokenDto })
   @ApiResponse({ status: 200, description: 'Token creation transaction prepared', type: TransactionResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid token parameters' })
   async createToken(
     @Req() req: Request,
     @Body() dto: CreateTokenDto,
   ): Promise<TransactionResponseDto> {
     const walletAddress = (req as any).walletAddress;
+    
+    // Validate input
+    if (!dto.name || dto.name.trim() === '') {
+      throw new HttpException({ message: 'Token name is required', error: 'Validation Failed', statusCode: 400 }, 400);
+    }
+
+    if (!dto.symbol || dto.symbol.trim() === '') {
+      throw new HttpException({ message: 'Token symbol is required', error: 'Validation Failed', statusCode: 400 }, 400);
+    }
+
+    if (!dto.uri || dto.uri.trim() === '') {
+      throw new HttpException({ message: 'Token URI is required', error: 'Validation Failed', statusCode: 400 }, 400);
+    }
     
     const request: CreateTokenRequest = {
       name: dto.name,
@@ -161,7 +303,23 @@ export class TokenManagementController {
     const result = await this.tokenManagementService.createToken(walletAddress, request);
     
     if (!result.success || !result.txId) {
-      throw new Error(result.error || 'Failed to prepare create transaction');
+      const errorMsg = result.error || 'Failed to prepare create transaction';
+      
+      const isUserError = 
+        errorMsg.toLowerCase().includes('invalid') ||
+        errorMsg.includes('required') ||
+        errorMsg.includes('must be');
+
+      const statusCode = isUserError ? 400 : 500;
+      
+      throw new HttpException(
+        {
+          message: errorMsg,
+          error: isUserError ? 'Validation Failed' : 'Create Transaction Failed',
+          statusCode,
+        },
+        statusCode,
+      );
     }
 
     return {
@@ -196,11 +354,33 @@ export class TokenManagementController {
   @ApiOperation({ summary: 'Create and buy a token in one transaction' })
   @ApiBody({ type: CreateTokenDto })
   @ApiResponse({ status: 200, description: 'Token creation and buy transaction prepared', type: TransactionResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid token parameters or buy amount' })
   async createAndBuyToken(
     @Req() req: Request,
     @Body() dto: CreateTokenDto & { solAmount: number },
   ): Promise<TransactionResponseDto> {
     const walletAddress = (req as any).walletAddress;
+    
+    // Validate input
+    if (!dto.name || dto.name.trim() === '') {
+      throw new HttpException({ message: 'Token name is required', error: 'Validation Failed', statusCode: 400 }, 400);
+    }
+
+    if (!dto.symbol || dto.symbol.trim() === '') {
+      throw new HttpException({ message: 'Token symbol is required', error: 'Validation Failed', statusCode: 400 }, 400);
+    }
+
+    if (!dto.uri || dto.uri.trim() === '') {
+      throw new HttpException({ message: 'Token URI is required', error: 'Validation Failed', statusCode: 400 }, 400);
+    }
+
+    if (!dto.solAmount || dto.solAmount <= 0) {
+      throw new HttpException({ message: 'SOL amount must be greater than 0', error: 'Validation Failed', statusCode: 400 }, 400);
+    }
+
+    if (dto.solAmount > 1000) {
+      throw new HttpException({ message: 'SOL amount too large. Maximum 1000 SOL per transaction.', error: 'Validation Failed', statusCode: 400 }, 400);
+    }
     
     const request: CreateAndBuyTokenRequest = {
       name: dto.name,
@@ -215,7 +395,24 @@ export class TokenManagementController {
     const result = await this.tokenManagementService.createAndBuyToken(walletAddress, request);
     
     if (!result.success || !result.txId) {
-      throw new Error(result.error || 'Failed to prepare create-and-buy transaction');
+      const errorMsg = result.error || 'Failed to prepare create-and-buy transaction';
+      
+      // Check if it's a user input error
+      const isUserError = 
+        errorMsg.toLowerCase().includes('invalid') ||
+        errorMsg.includes('required') ||
+        errorMsg.includes('must be');
+
+      const statusCode = isUserError ? 400 : 500;
+      
+      throw new HttpException(
+        {
+          message: errorMsg,
+          error: isUserError ? 'Validation Failed' : 'Create Transaction Failed',
+          statusCode,
+        },
+        statusCode,
+      );
     }
 
     // Record transaction in history
@@ -244,12 +441,25 @@ export class TokenManagementController {
   })
   @ApiBody({ type: SubmitSignedTransactionDto })
   @ApiResponse({ status: 200, description: 'Transaction submitted successfully', type: SubmitTransactionResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid transaction or signature' })
   async submitSignedTransactionWithPendingId(
     @Req() req: Request,
     @Param('pendingId') pendingId: string,
     @Body() dto: SubmitSignedTransactionDto,
   ): Promise<SubmitTransactionResponseDto> {
     const walletAddress = (req as any).walletAddress;
+    
+    // Validate input
+    if (!dto.signedTransaction || dto.signedTransaction.trim() === '') {
+      throw new HttpException(
+        {
+          message: 'Signed transaction data is required',
+          error: 'Validation Failed',
+          statusCode: 400,
+        },
+        400,
+      );
+    }
     
     try {
       const result = await this.tokenManagementService.submitSignedTransaction(
@@ -261,13 +471,23 @@ export class TokenManagementController {
       if (!result.success || !result.txId) {
         const errorMsg = result.error || 'Failed to submit transaction';
         console.error('Transaction submission failed:', errorMsg);
+        
+        // Check if it's a user error or blockchain error
+        const isUserError = 
+          errorMsg.includes('Invalid signature') ||
+          errorMsg.includes('not signed') ||
+          errorMsg.includes('blockhash not found') ||
+          errorMsg.includes('already processed');
+
+        const statusCode = isUserError ? 400 : 500;
+        
         throw new HttpException(
           {
             message: errorMsg,
-            error: 'Transaction Submission Failed',
-            statusCode: 400,
+            error: isUserError ? 'Validation Failed' : 'Transaction Submission Failed',
+            statusCode,
           },
-          400,
+          statusCode,
         );
       }
 
@@ -302,6 +522,18 @@ export class TokenManagementController {
   ): Promise<SubmitTransactionResponseDto> {
     const walletAddress = (req as any).walletAddress;
     
+    // Validate input
+    if (!dto.signedTransaction || dto.signedTransaction.trim() === '') {
+      throw new HttpException(
+        {
+          message: 'Signed transaction data is required',
+          error: 'Validation Failed',
+          statusCode: 400,
+        },
+        400,
+      );
+    }
+    
     try {
       const result = await this.tokenManagementService.submitSignedTransaction(
         dto.signedTransaction,
@@ -312,14 +544,23 @@ export class TokenManagementController {
       if (!result.success || !result.txId) {
         const errorMsg = result.error || 'Failed to submit transaction';
         console.error('Transaction submission failed:', errorMsg);
-        // Throw as BadRequestException to get proper HTTP status and error message
+        
+        // Check if it's a user error or blockchain error
+        const isUserError = 
+          errorMsg.includes('Invalid signature') ||
+          errorMsg.includes('not signed') ||
+          errorMsg.includes('blockhash not found') ||
+          errorMsg.includes('already processed');
+
+        const statusCode = isUserError ? 400 : 500;
+        
         throw new HttpException(
           {
             message: errorMsg,
-            error: 'Transaction Submission Failed',
-            statusCode: 400,
+            error: isUserError ? 'Validation Failed' : 'Transaction Submission Failed',
+            statusCode,
           },
-          400,
+          statusCode,
         );
       }
 

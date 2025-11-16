@@ -37,7 +37,15 @@ export class SupabaseService implements OnModuleInit {
 
   // Convenience methods for common operations
   get db() {
+    if (!this.supabase) {
+      throw new Error('Supabase client not initialized. Check SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.');
+    }
     return this.getClient();
+  }
+
+  // Check if Supabase is configured
+  isConfigured(): boolean {
+    return !!this.supabase;
   }
 
   // Transaction methods
@@ -175,8 +183,11 @@ export class SupabaseService implements OnModuleInit {
     mint: string,
     updates: {
       price_sol?: number;
+      price_usd?: number;
       market_cap_sol?: number;
+      market_cap_usd?: number;
       volume_24h_sol?: number;
+      volume_24h_usd?: number;
       holders_count?: number;
     }
   ) {

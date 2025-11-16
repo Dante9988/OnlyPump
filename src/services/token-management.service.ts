@@ -5,6 +5,7 @@ import { OnlinePumpAmmSdk, PUMP_AMM_SDK, canonicalPumpPoolPda } from '@pump-fun/
 import { ConfigService } from '@nestjs/config';
 import { VanityAddressManagerService } from './vanity-address-manager.service';
 import { JitoService } from './jito.service';
+import { SupabaseService } from './supabase.service';
 import { createComputeBudgetInstruction } from '../utils/transaction.utils';
 import { TransactionSpeed } from '../interfaces/pump-fun.interface';
 import BN from 'bn.js';
@@ -44,6 +45,8 @@ export interface TokenOperationResult {
   txId?: string;
   tokenMint?: string;
   vanityAddress?: string;
+  tokenAmount?: number; // Amount of tokens (for sells)
+  solAmount?: number; // Amount of SOL (for buys/sells)
   error?: string;
 }
 
@@ -58,7 +61,8 @@ export class TokenManagementService {
   constructor(
     private configService: ConfigService,
     private vanityAddressManager: VanityAddressManagerService,
-    private jitoService: JitoService
+    private jitoService: JitoService,
+    private supabaseService: SupabaseService,
   ) {
     const rpcUrl = this.configService.get<string>('SOLANA_RPC_URL') || 'https://api.devnet.solana.com';
     this.connection = new Connection(rpcUrl, 'confirmed');
@@ -122,6 +126,26 @@ export class TokenManagementService {
         requireAllSignatures: false,
         verifySignatures: false
       });
+
+      // Store token metadata in database (if Supabase is configured)
+      if (this.supabaseService.isConfigured()) {
+        try {
+          await this.supabaseService.createToken({
+            mint: mintKeypair.publicKey.toString(),
+            name: request.name,
+            symbol: request.symbol,
+            uri: request.uri,
+            description: request.description,
+            creator_wallet: walletPublicKey,
+            is_vanity: !!vanityAddress,
+            vanity_suffix: vanityAddress ? 'pump' : undefined,
+          });
+          this.logger.log(`Token metadata saved to database: ${mintKeypair.publicKey.toString()}`);
+        } catch (error) {
+          this.logger.error(`Failed to save token metadata to database: ${error}`);
+          // Continue even if DB save fails
+        }
+      }
 
       return {
         success: true,
@@ -215,6 +239,26 @@ export class TokenManagementService {
         requireAllSignatures: false,
         verifySignatures: false
       });
+
+      // Store token metadata in database (if Supabase is configured)
+      if (this.supabaseService.isConfigured()) {
+        try {
+          await this.supabaseService.createToken({
+            mint: mintKeypair.publicKey.toString(),
+            name: request.name,
+            symbol: request.symbol,
+            uri: request.uri,
+            description: request.description,
+            creator_wallet: walletPublicKey,
+            is_vanity: !!vanityAddress,
+            vanity_suffix: vanityAddress ? 'pump' : undefined,
+          });
+          this.logger.log(`Token metadata saved to database: ${mintKeypair.publicKey.toString()}`);
+        } catch (error) {
+          this.logger.error(`Failed to save token metadata to database: ${error}`);
+          // Continue even if DB save fails
+        }
+      }
 
       return {
         success: true,
@@ -569,6 +613,7 @@ export class TokenManagementService {
       return {
         success: true,
         tokenMint: request.tokenMint,
+        tokenAmount: sellAmount, // Number of tokens being sold
         // Return the serialized transaction for frontend signing
         txId: Buffer.from(serializedTransaction).toString('base64')
       };
