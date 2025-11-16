@@ -5,7 +5,13 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "webpack": false,
-    "tsConfigPath": "tsconfig.json"
+    "tsConfigPath": "tsconfig.json",
+    "assets": [
+      {
+        "include": "common/**/*.json",
+        "outDir": "dist"
+      }
+    ]
   },
   "watchOptions": {
     "watchFile": "useFsEvents",

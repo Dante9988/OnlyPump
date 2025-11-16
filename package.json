@@ -24,7 +24,10 @@
     "dapp:test": "dotenv -e env.test -- ts-node src/examples/web-dapp-example.ts",
     "generate-signature": "node scripts/generate-signature.js",
     "test-signature": "node scripts/test-signature.js",
-    "verify-devnet": "node scripts/verify-devnet-setup.js"
+    "verify-devnet": "node scripts/verify-devnet-setup.js",
+    "test-buy-sell": "node scripts/test-buy-and-sell.js",
+    "test-buy": "node scripts/test-buy.js",
+    "test-sell": "node scripts/test-sell.js"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
@@ -45,6 +48,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "dotenv": "^16.4.5",
+    "jito-js-rpc": "^0.2.2",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.1",

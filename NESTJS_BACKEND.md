@@ -295,18 +295,30 @@ GET /api/transactions/tx/:signature
 
 ## Authentication
 
-The API uses wallet signature-based authentication. Users must sign a message with their wallet's private key to authenticate requests.
+The API uses a **two-step authentication process**:
+
+1. **Off-chain Authentication** (API Access): User signs a message with their wallet to prove ownership
+2. **On-chain Transaction Signing** (Blockchain): User signs the actual transaction returned by the API
 
 ### Authentication Flow
 
+#### Step 1: Off-chain Authentication (API Access)
+
 1. **Frontend**: User connects wallet (e.g., Phantom)
-2. **Frontend**: Signs authentication message with wallet
+2. **Frontend**: Signs authentication message with wallet using `signMessage()` (off-chain, no blockchain transaction)
 3. **Frontend**: Sends request with signature in `x-request-signature` header
 4. **Backend**: Verifies signature matches wallet address
 
-### Message Format
+#### Step 2: On-chain Transaction Signing
 
-The message to sign is:
+1. **Backend**: Returns serialized transaction (base64 encoded)
+2. **Frontend**: Deserializes transaction
+3. **Frontend**: Signs transaction with Phantom using `signTransaction()` (on-chain)
+4. **Frontend**: Submits signed transaction to blockchain
+
+### Message Format for Off-chain Authentication
+
+The message to sign for API authentication is:
 ```
 Sign this message to authenticate with OnlyPump API.
 
@@ -315,9 +327,15 @@ Wallet: {wallet_address}
 This signature proves you own this wallet and allows you to interact with the API.
 ```
 
-### Generating Signatures
+**Important**: This is an off-chain signature (message signing), not a blockchain transaction. It only proves wallet ownership for API access.
 
-Use the provided script to generate test signatures:
+### Frontend Integration
+
+For complete frontend integration examples, see [FRONTEND_INTEGRATION.md](./FRONTEND_INTEGRATION.md).
+
+### Generating Signatures for Testing
+
+Use the provided script to generate test signatures for Postman/curl:
 
 ```bash
 yarn generate-signature
@@ -337,7 +355,8 @@ The script outputs:
 ```bash
 curl -X GET http://localhost:3000/api/transactions/WALLET_ADDRESS \
   -H "Content-Type: application/json" \
-  -H "x-request-signature: BASE64_SIGNATURE"
+  -H "x-request-signature: BASE64_SIGNATURE" \
+  -H "x-wallet-address: WALLET_ADDRESS"
 ```
 
 ### Route Parameters

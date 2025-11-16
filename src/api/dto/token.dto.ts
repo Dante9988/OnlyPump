@@ -66,6 +66,11 @@ export class BuyTokenDto {
   @Min(0.000001)
   solAmount: number;
 
+  @ApiProperty({ description: 'Wallet address (for middleware authentication)', required: false })
+  @IsString()
+  @IsOptional()
+  walletAddress?: string;
+
   @ApiProperty({ 
     description: 'Transaction speed setting', 
     enum: TransactionSpeed,
@@ -104,6 +109,11 @@ export class SellTokenDto {
   @Min(1)
   @Max(100)
   percentage: number;
+
+  @ApiProperty({ description: 'Wallet address (for middleware authentication)', required: false })
+  @IsString()
+  @IsOptional()
+  walletAddress?: string;
 
   @ApiProperty({ 
     description: 'Transaction speed setting', 

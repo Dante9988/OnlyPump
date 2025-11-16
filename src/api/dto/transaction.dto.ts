@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { TransactionType } from '../../services/transaction-history.service';
 
 export class TransactionResponseDto {
@@ -71,5 +72,32 @@ export class WalletStatsDto {
 
   @ApiProperty({ description: 'Total SOL received' })
   totalSolReceived: number;
+}
+
+export class SubmitSignedTransactionDto {
+  @ApiProperty({ description: 'Base64 encoded signed transaction from Phantom wallet' })
+  @IsString()
+  @IsNotEmpty()
+  signedTransaction: string;
+
+  @ApiProperty({ description: 'Wallet address (for middleware authentication)', required: false })
+  @IsString()
+  @IsOptional()
+  walletAddress?: string;
+
+  @ApiProperty({ description: 'Whether to use Jito for faster transactions', example: false, required: false })
+  @IsOptional()
+  useJito?: boolean;
+}
+
+export class SubmitTransactionResponseDto {
+  @ApiProperty({ description: 'Transaction signature (txId) on the blockchain' })
+  transactionSignature: string;
+
+  @ApiProperty({ description: 'Transaction status' })
+  status: 'submitted' | 'confirmed' | 'failed';
+
+  @ApiProperty({ description: 'Pending transaction ID (if applicable)', required: false })
+  pendingTransactionId?: string;
 }
 

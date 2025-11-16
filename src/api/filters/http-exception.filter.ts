@@ -65,7 +65,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     );
 
     // Create a standardized error response
-    const errorObject = {
+    const errorObject: any = {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
@@ -73,9 +73,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
       error: exception instanceof Error ? exception.message : 'Internal server error',
     };
 
-    // Don't expose internal server error details to the client
-    if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
-      errorObject.error = 'Internal server error';
+    // For transaction-related errors, show the actual error message
+    // This helps with debugging slippage and other transaction issues
+    if (request.url.includes('/tokens/') && request.url.includes('/submit-signed')) {
+      // Show detailed error for transaction submission
+      errorObject.error = exception instanceof Error ? exception.message : 'Internal server error';
+      errorObject.details = exception instanceof Error ? exception.stack : undefined;
+    } else if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+      // For other 500 errors, show message if it's a known transaction error
+      const errorMessage = exception instanceof Error ? exception.message : 'Internal server error';
+      if (errorMessage.includes('Slippage') || errorMessage.includes('transaction') || errorMessage.includes('Transaction')) {
+        errorObject.error = errorMessage;
+      } else {
+        errorObject.error = 'Internal server error';
+      }
     }
 
     response.status(status).json(errorObject);

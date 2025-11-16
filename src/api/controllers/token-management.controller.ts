@@ -1,9 +1,9 @@
-import { Controller, Post, Body, Get, Req, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Req, Query, Param, HttpException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader } from '@nestjs/swagger';
 import { Request } from 'express';
 import { TokenManagementService, CreateTokenRequest, CreateAndBuyTokenRequest, BuyTokenRequest, SellTokenRequest } from '../../services/token-management.service';
 import { TransactionHistoryService, TransactionType } from '../../services/transaction-history.service';
-import { TransactionResponseDto } from '../dto/transaction.dto';
+import { TransactionResponseDto, SubmitSignedTransactionDto, SubmitTransactionResponseDto } from '../dto/transaction.dto';
 import { CreateTokenDto, BuyTokenDto, SellTokenDto } from '../dto/token.dto';
 
 @ApiTags('Token Management')
@@ -77,6 +77,10 @@ export class TokenManagementController {
     const request: SellTokenRequest = {
       tokenMint: dto.tokenMint,
       percentage: dto.percentage,
+      slippageBps: dto.slippageBps,
+      speed: dto.speed,
+      useJito: dto.useJito,
+      jitoTipLamports: dto.jitoTipLamports,
     };
 
     const result = await this.tokenManagementService.sellToken(walletAddress, request);
@@ -177,6 +181,113 @@ export class TokenManagementController {
       type: TransactionType.CREATE_AND_BUY,
       solAmount: dto.solAmount,
     };
+  }
+
+  @Post(':pendingId/submit-signed')
+  @ApiOperation({ 
+    summary: 'Submit a signed transaction and update pending transaction record',
+    description: 'Submit a signed transaction and update the pending transaction record with the actual signature.'
+  })
+  @ApiBody({ type: SubmitSignedTransactionDto })
+  @ApiResponse({ status: 200, description: 'Transaction submitted successfully', type: SubmitTransactionResponseDto })
+  async submitSignedTransactionWithPendingId(
+    @Req() req: Request,
+    @Param('pendingId') pendingId: string,
+    @Body() dto: SubmitSignedTransactionDto,
+  ): Promise<SubmitTransactionResponseDto> {
+    const walletAddress = (req as any).walletAddress;
+    
+    try {
+      const result = await this.tokenManagementService.submitSignedTransaction(
+        dto.signedTransaction,
+        walletAddress,
+        dto.useJito ?? false
+      );
+
+      if (!result.success || !result.txId) {
+        const errorMsg = result.error || 'Failed to submit transaction';
+        console.error('Transaction submission failed:', errorMsg);
+        throw new HttpException(
+          {
+            message: errorMsg,
+            error: 'Transaction Submission Failed',
+            statusCode: 400,
+          },
+          400,
+        );
+      }
+
+      // Update the pending transaction record with the actual signature
+      await this.transactionHistoryService.updateTransactionSignature(
+        pendingId,
+        result.txId
+      );
+
+      return {
+        transactionSignature: result.txId,
+        status: 'submitted',
+        pendingTransactionId: pendingId,
+      };
+    } catch (error) {
+      console.error('Error in submitSignedTransactionWithPendingId controller:', error);
+      throw error;
+    }
+  }
+
+  @Post('submit-signed')
+  @ApiOperation({ 
+    summary: 'Submit a signed transaction to the blockchain',
+    description: 'After the user signs a transaction with their Phantom wallet, submit it to the blockchain. The transaction must be signed by the wallet authenticated via x-request-signature.'
+  })
+  @ApiBody({ type: SubmitSignedTransactionDto })
+  @ApiResponse({ status: 200, description: 'Transaction submitted successfully', type: SubmitTransactionResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid transaction or not signed correctly' })
+  async submitSignedTransaction(
+    @Req() req: Request,
+    @Body() dto: SubmitSignedTransactionDto,
+  ): Promise<SubmitTransactionResponseDto> {
+    const walletAddress = (req as any).walletAddress;
+    
+    try {
+      const result = await this.tokenManagementService.submitSignedTransaction(
+        dto.signedTransaction,
+        walletAddress,
+        dto.useJito ?? false
+      );
+
+      if (!result.success || !result.txId) {
+        const errorMsg = result.error || 'Failed to submit transaction';
+        console.error('Transaction submission failed:', errorMsg);
+        // Throw as BadRequestException to get proper HTTP status and error message
+        throw new HttpException(
+          {
+            message: errorMsg,
+            error: 'Transaction Submission Failed',
+            statusCode: 400,
+          },
+          400,
+        );
+      }
+
+      // Update transaction history if there's a pending transaction ID
+      // The frontend should pass the pendingTransactionId if available
+      const pendingTransactionId = (req.body as any).pendingTransactionId;
+      if (pendingTransactionId) {
+        await this.transactionHistoryService.updateTransactionSignature(
+          pendingTransactionId,
+          result.txId
+        );
+      }
+
+      return {
+        transactionSignature: result.txId,
+        status: 'submitted',
+        pendingTransactionId: pendingTransactionId,
+      };
+    } catch (error) {
+      console.error('Error in submitSignedTransaction controller:', error);
+      throw error;
+    }
   }
 
 }

@@ -47,6 +47,8 @@ export class AppModule {
         { path: 'api/tokens/create-and-buy', method: RequestMethod.POST },
         { path: 'api/tokens/buy', method: RequestMethod.POST },
         { path: 'api/tokens/sell', method: RequestMethod.POST },
+        { path: 'api/tokens/submit-signed', method: RequestMethod.POST },
+        { path: 'api/tokens/:pendingId/submit-signed', method: RequestMethod.POST },
         { path: 'api/transactions/:walletAddress', method: RequestMethod.GET },
         { path: 'api/transactions/:walletAddress/stats', method: RequestMethod.GET },
       );
