@@ -29,7 +29,7 @@ export class TransactionHistoryController {
   async getTransaction(
     @Param('signature') signature: string,
   ): Promise<TransactionRecordDto | null> {
-    const transaction = this.transactionHistoryService.getTransaction(signature);
+    const transaction = await this.transactionHistoryService.getTransaction(signature);
     return transaction || null;
   }
 
@@ -76,7 +76,7 @@ export class TransactionHistoryController {
     @Query('type') type?: TransactionType,
     @Query('limit') limit?: number,
   ): Promise<TransactionRecordDto[]> {
-    const transactions = this.transactionHistoryService.getWalletTransactions(
+    const transactions = await this.transactionHistoryService.getWalletTransactions(
       walletAddress,
       type,
       limit ? parseInt(limit.toString(), 10) : undefined,
