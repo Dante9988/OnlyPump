@@ -8,6 +8,7 @@ import { JitoService } from './jito.service';
 import { createComputeBudgetInstruction } from '../utils/transaction.utils';
 import { TransactionSpeed } from '../interfaces/pump-fun.interface';
 import BN from 'bn.js';
+import { TOKEN_PROGRAM_ID } from '../common/constants';
 
 export interface CreateTokenRequest {
   name: string;
@@ -305,7 +306,7 @@ export class TokenManagementService {
             bondingCurve: bc,
             amount: solAmountBN,
             feeConfig: null,
-            mintSupply: null
+            mintSupply: null,
           }),
           slippage: 5, // 5% slippage to account for price movement
         });
