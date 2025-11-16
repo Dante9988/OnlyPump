@@ -363,28 +363,17 @@ export class TokenManagementService {
         throw new Error(`No tokens found in wallet ${walletPubkey.toString()} for token ${request.tokenMint}`);
       }
 
-      // Calculate amount to sell
-      // To avoid hitting Pump.fun's TooLittleSolReceived when dumping illiquid bags,
-      // we never sell more than a small safe percentage of the wallet's balance in a single tx.
+      // Calculate amount to sell based on requested percentage (1–100)
       const requestedPercentage = request.percentage;
-      const MAX_SELL_PERCENTAGE_PER_TX = 10; // sell at most 10% of bag per transaction
-      const effectivePercentage = Math.min(requestedPercentage, MAX_SELL_PERCENTAGE_PER_TX);
-
-      if (effectivePercentage !== requestedPercentage) {
-        this.logger.warn(
-          `Requested to sell ${requestedPercentage}% of tokens, clamping to ${effectivePercentage}% to reduce price impact and avoid TooLittleSolReceived`
-        );
-      }
-
-      const sellAmount = Math.floor(tokenBalance * (effectivePercentage / 100));
+      const sellAmount = Math.floor(tokenBalance * (requestedPercentage / 100));
       if (sellAmount <= 0) {
         throw new Error(
-          `Invalid sell amount: ${sellAmount} (balance: ${tokenBalance}, effectivePercentage: ${effectivePercentage}%)`
+          `Invalid sell amount: ${sellAmount} (balance: ${tokenBalance}, requestedPercentage: ${requestedPercentage}%)`
         );
       }
 
       const sellAmountBN = new BN(sellAmount);
-      this.logger.log(`Selling ${sellAmount} tokens (${effectivePercentage}% of ${tokenBalance} total)`);
+      this.logger.log(`Selling ${sellAmount} tokens (${requestedPercentage}% of ${tokenBalance} total)`);
 
       // Check if token has migrated by fetching bonding curve
       let bondingCurve;
@@ -745,35 +734,64 @@ export class TokenManagementService {
           this.logger.log(`Transaction submitted successfully: ${txId}`);
         }
       } catch (sendError: any) {
-        // Extract detailed error information
-        let errorMessage = sendError.message || 'Unknown error';
-        let errorDetails = '';
-        
-        // Check for simulation errors (slippage, etc.)
-        if (sendError.logs && Array.isArray(sendError.logs)) {
-          const logs = sendError.logs.join('\n');
-          errorDetails = `\nTransaction Logs:\n${logs}`;
+        const rawMessage: string = sendError?.message || '';
+        const alreadyProcessed =
+          rawMessage.includes('already been processed') ||
+          rawMessage.includes('This transaction has already been processed');
+
+        if (alreadyProcessed) {
+          try {
+            // Derive the transaction signature from the first signed signature
+            const bs58Module = require('bs58');
+            const bs58 = bs58Module.default || bs58Module;
+
+            const primarySig = signedTransaction.signatures[0]?.signature;
+            if (!primarySig) {
+              throw new Error('Missing primary signature on already-processed transaction');
+            }
+
+            txId = bs58.encode(primarySig);
+            this.logger.warn(
+              `Transaction already processed on-chain, treating as success with signature ${txId}`,
+            );
+          } catch (deriveError: any) {
+            this.logger.error(
+              'Failed to derive signature for already-processed transaction:',
+              deriveError?.message || deriveError,
+            );
+            throw new Error(rawMessage);
+          }
+        } else {
+          // Extract detailed error information
+          let errorMessage = rawMessage || 'Unknown error';
+          let errorDetails = '';
           
-          // Check for specific error patterns
-          if (logs.includes('TooMuchSolRequired') || logs.includes('TooLittleSolReceived')) {
-            errorMessage = 'Slippage tolerance exceeded. Price moved too much between transaction creation and submission.';
-          } else if (logs.includes('InsufficientFunds')) {
-            errorMessage = 'Insufficient funds to complete the transaction.';
-          } else if (logs.includes('custom program error')) {
-            const errorMatch = logs.match(/Error Code: (\w+).*Error Message: ([^\n]+)/);
-            if (errorMatch) {
-              errorMessage = `${errorMatch[1]}: ${errorMatch[2]}`;
+          // Check for simulation errors (slippage, etc.)
+          if (sendError.logs && Array.isArray(sendError.logs)) {
+            const logs = sendError.logs.join('\n');
+            errorDetails = `\nTransaction Logs:\n${logs}`;
+            
+            // Check for specific error patterns
+            if (logs.includes('TooMuchSolRequired') || logs.includes('TooLittleSolReceived')) {
+              errorMessage = 'Slippage tolerance exceeded. Price moved too much between transaction creation and submission.';
+            } else if (logs.includes('InsufficientFunds')) {
+              errorMessage = 'Insufficient funds to complete the transaction.';
+            } else if (logs.includes('custom program error')) {
+              const errorMatch = logs.match(/Error Code: (\w+).*Error Message: ([^\n]+)/);
+              if (errorMatch) {
+                errorMessage = `${errorMatch[1]}: ${errorMatch[2]}`;
+              }
             }
           }
+          
+          // Try to get more details from the error object
+          if (sendError.err) {
+            errorDetails += `\nError Object: ${JSON.stringify(sendError.err, null, 2)}`;
+          }
+          
+          this.logger.error(`Error sending raw transaction: ${errorMessage}${errorDetails}`);
+          throw new Error(`${errorMessage}${errorDetails}`);
         }
-        
-        // Try to get more details from the error object
-        if (sendError.err) {
-          errorDetails += `\nError Object: ${JSON.stringify(sendError.err, null, 2)}`;
-        }
-        
-        this.logger.error(`Error sending raw transaction: ${errorMessage}${errorDetails}`);
-        throw new Error(`${errorMessage}${errorDetails}`);
       }
 
       // Wait for confirmation (non-blocking, but we'll wait a bit)

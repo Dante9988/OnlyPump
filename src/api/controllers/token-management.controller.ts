@@ -86,7 +86,23 @@ export class TokenManagementController {
     const result = await this.tokenManagementService.sellToken(walletAddress, request);
     
     if (!result.success || !result.txId) {
-      throw new Error(result.error || 'Failed to prepare sell transaction');
+      const message = result.error || 'Failed to prepare sell transaction';
+      // Map common user-facing errors to 400 instead of 500
+      const isUserInputError =
+        message.includes('No tokens found') ||
+        message.includes('Invalid sell amount') ||
+        message.toLowerCase().includes('slippage');
+
+      const status = isUserInputError ? 400 : 500;
+
+      throw new HttpException(
+        {
+          message,
+          error: 'Sell Transaction Preparation Failed',
+          statusCode: status,
+        },
+        status,
+      );
     }
 
     // Record transaction in history
