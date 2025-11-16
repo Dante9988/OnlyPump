@@ -313,13 +313,29 @@ export class TokenManagementService {
         if (validation.limits) {
           this.logger.log(`Trade limits: max=${validation.limits.recommendedMaxBuySOL.toFixed(4)} SOL, liquidity=${validation.limits.liquiditySOL.toFixed(2)} SOL, impact=${validation.limits.priceImpactPercentage.toFixed(2)}%`);
           
-          // Adjust slippage based on price impact if user didn't specify custom slippage
+          // Calculate recommended slippage based on price impact
+          const recommendedSlippageBps = calculateRecommendedSlippage(
+            validation.limits.priceImpactPercentage,
+            500 // base slippage for buys
+          );
+          
+          // If user provided slippage, validate it's sufficient
+          if (request.slippageBps !== undefined && request.slippageBps < recommendedSlippageBps) {
+            const errorMsg = 
+              `Slippage tolerance too low. Your slippage: ${request.slippageBps} bps (${(request.slippageBps/100).toFixed(1)}%). ` +
+              `Required: ${recommendedSlippageBps} bps (${(recommendedSlippageBps/100).toFixed(1)}%) ` +
+              `due to ${validation.limits.priceImpactPercentage.toFixed(2)}% price impact. ` +
+              `Please increase slippage or reduce trade size to ${(validation.limits.recommendedMaxBuySOL * 0.7).toFixed(4)} SOL.`;
+            this.logger.error(`Buy slippage validation failed: ${errorMsg}`);
+            throw new Error(errorMsg);
+          }
+          
+          // Use recommended slippage if user didn't provide any
           if (!request.slippageBps) {
-            const recommendedSlippage = calculateRecommendedSlippage(validation.limits.priceImpactPercentage);
-            if (recommendedSlippage > buySlippageBps) {
-              this.logger.log(`Increasing slippage from ${buySlippageBps} to ${recommendedSlippage} bps due to ${validation.limits.priceImpactPercentage.toFixed(2)}% price impact`);
-              buySdkSlippage = recommendedSlippage / 100;
-            }
+            buySdkSlippage = recommendedSlippageBps / 100;
+            this.logger.log(`Using recommended slippage: ${recommendedSlippageBps} bps (${buySdkSlippage}%)`);
+          } else {
+            this.logger.log(`Using user-provided slippage: ${request.slippageBps} bps (${buySdkSlippage}%)`);
           }
         }
 
@@ -476,13 +492,29 @@ export class TokenManagementService {
         if (validation.limits) {
           this.logger.log(`Trade limits: max=${validation.limits.recommendedMaxSellTokens.toLocaleString()} tokens, liquidity=${validation.limits.liquiditySOL.toFixed(2)} SOL, impact=${validation.limits.priceImpactPercentage.toFixed(2)}%`);
           
-          // Adjust slippage based on price impact if user didn't specify custom slippage
+          // Calculate recommended slippage based on price impact
+          const recommendedSlippageBps = calculateRecommendedSlippage(
+            validation.limits.priceImpactPercentage,
+            1000 // base slippage for sells (higher than buys)
+          );
+          
+          // If user provided slippage, validate it's sufficient
+          if (request.slippageBps !== undefined && request.slippageBps < recommendedSlippageBps) {
+            const errorMsg = 
+              `Slippage tolerance too low. Your slippage: ${request.slippageBps} bps (${(request.slippageBps/100).toFixed(1)}%). ` +
+              `Required: ${recommendedSlippageBps} bps (${(recommendedSlippageBps/100).toFixed(1)}%) ` +
+              `due to ${validation.limits.priceImpactPercentage.toFixed(2)}% price impact. ` +
+              `Please increase slippage or reduce sell percentage to ${Math.floor(requestedPercentage * 0.7)}%.`;
+            this.logger.error(`Sell slippage validation failed: ${errorMsg}`);
+            throw new Error(errorMsg);
+          }
+          
+          // Use recommended slippage if user didn't provide any
           if (!request.slippageBps) {
-            const recommendedSlippage = calculateRecommendedSlippage(validation.limits.priceImpactPercentage, 1000);
-            if (recommendedSlippage > maxSlippageBps) {
-              this.logger.log(`Increasing slippage from ${maxSlippageBps} to ${recommendedSlippage} bps due to ${validation.limits.priceImpactPercentage.toFixed(2)}% price impact`);
-              maxSlippageBps = recommendedSlippage;
-            }
+            maxSlippageBps = recommendedSlippageBps;
+            this.logger.log(`Using recommended slippage: ${recommendedSlippageBps} bps (${recommendedSlippageBps/100}%)`);
+          } else {
+            this.logger.log(`Using user-provided slippage: ${request.slippageBps} bps (${request.slippageBps/100}%)`);
           }
         }
 
