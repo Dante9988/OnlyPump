@@ -1,4 +1,6 @@
 import { PublicKey } from '@solana/web3.js';
+import onlypumpPresaleIdl from '../../onlypump-presale/target/idl/onlypump_presale.json';
+import type { OnlypumpPresale } from '../../onlypump-presale/target/types/onlypump_presale';
 
 /**
  * Constants for Pump.fun and PumpSwap integration
@@ -54,3 +56,11 @@ export const RENT_SYSVAR_ID = new PublicKey('SysvarRent1111111111111111111111111
 
 // Event Authority
 export const EVENT_AUTHORITY = new PublicKey('Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1');
+
+// OnlyPump Presale (Anchor) program
+export const ONLYPUMP_PRESALE_PROGRAM_ID = new PublicKey(
+  '5zqdoDng2LnQ7JbiemiRwzTaPnnEU4eMXMfCCF3P4xQQ',
+);
+
+// Anchor IDL for the OnlyPump Presale program
+export const ONLYPUMP_PRESALE_IDL = onlypumpPresaleIdl as OnlypumpPresale;

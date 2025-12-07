@@ -1,0 +1,22 @@
+[package]
+name = "onlypump_presale"
+version = "0.1.0"
+description = "OnlyPump Presale - Solana presale program with vesting"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "onlypump_presale"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.32.1"
+anchor-spl = "0.32.1"
+solana-program = "2.1.0"
+
