@@ -1,0 +1,1407 @@
+{
+    "address": "5zqdoDng2LnQ7JbiemiRwzTaPnnEU4eMXMfCCF3P4xQQ",
+    "metadata": {
+      "name": "onlypump_presale",
+      "version": "0.1.0",
+      "spec": "0.1.0",
+      "description": "Created with Anchor"
+    },
+    "instructions": [
+      {
+        "name": "claim_tokens",
+        "docs": [
+          "User claims their allocated tokens after migration"
+        ],
+        "discriminator": [
+          108,
+          216,
+          210,
+          231,
+          0,
+          212,
+          42,
+          64
+        ],
+        "accounts": [
+          {
+            "name": "presale",
+            "writable": true
+          },
+          {
+            "name": "token_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    116,
+                    111,
+                    107,
+                    101,
+                    110,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "token_vault_authority",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    116,
+                    111,
+                    107,
+                    101,
+                    110,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user_position",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    111,
+                    115,
+                    105,
+                    116,
+                    105,
+                    111,
+                    110
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                },
+                {
+                  "kind": "account",
+                  "path": "user"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "user_token_account",
+            "writable": true
+          },
+          {
+            "name": "token_program",
+            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          }
+        ],
+        "args": []
+      },
+      {
+        "name": "contribute_public",
+        "docs": [
+          "User contributes SOL to the public presale"
+        ],
+        "discriminator": [
+          110,
+          255,
+          244,
+          200,
+          223,
+          54,
+          57,
+          163
+        ],
+        "accounts": [
+          {
+            "name": "presale",
+            "writable": true
+          },
+          {
+            "name": "public_sol_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    117,
+                    98,
+                    108,
+                    105,
+                    99,
+                    95,
+                    115,
+                    111,
+                    108,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user_position",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    111,
+                    115,
+                    105,
+                    116,
+                    105,
+                    111,
+                    110
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                },
+                {
+                  "kind": "account",
+                  "path": "user"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "whitelist",
+            "optional": true
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "amount_lamports",
+            "type": "u64"
+          }
+        ]
+      },
+      {
+        "name": "create_presale",
+        "docs": [
+          "Create a new presale for a token"
+        ],
+        "discriminator": [
+          176,
+          144,
+          197,
+          158,
+          61,
+          119,
+          75,
+          135
+        ],
+        "accounts": [
+          {
+            "name": "platform",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    108,
+                    97,
+                    116,
+                    102,
+                    111,
+                    114,
+                    109
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "presale",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    114,
+                    101,
+                    115,
+                    97,
+                    108,
+                    101
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "mint"
+                }
+              ]
+            }
+          },
+          {
+            "name": "token_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    116,
+                    111,
+                    107,
+                    101,
+                    110,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "token_vault_authority",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    116,
+                    111,
+                    107,
+                    101,
+                    110,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "ecosystem_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    101,
+                    99,
+                    111,
+                    115,
+                    121,
+                    115,
+                    116,
+                    101,
+                    109,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "ecosystem_vault_authority",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    101,
+                    99,
+                    111,
+                    115,
+                    121,
+                    115,
+                    116,
+                    101,
+                    109,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "public_sol_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    117,
+                    98,
+                    108,
+                    105,
+                    99,
+                    95,
+                    115,
+                    111,
+                    108,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "admin",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "mint"
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          },
+          {
+            "name": "token_program",
+            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          },
+          {
+            "name": "associated_token_program",
+            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+          }
+        ],
+        "args": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "public_start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "public_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "public_price_lamports_per_token",
+            "type": "u64"
+          },
+          {
+            "name": "hard_cap_lamports",
+            "type": "u64"
+          }
+        ]
+      },
+      {
+        "name": "finalize_presale",
+        "docs": [
+          "Finalize the presale"
+        ],
+        "discriminator": [
+          100,
+          245,
+          60,
+          81,
+          177,
+          232,
+          255,
+          99
+        ],
+        "accounts": [
+          {
+            "name": "platform",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    108,
+                    97,
+                    116,
+                    102,
+                    111,
+                    114,
+                    109
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "presale",
+            "writable": true
+          },
+          {
+            "name": "admin",
+            "signer": true
+          }
+        ],
+        "args": []
+      },
+      {
+        "name": "fund_presale_tokens",
+        "docs": [
+          "Fund the presale token vault with the required tokens (800M total)"
+        ],
+        "discriminator": [
+          237,
+          119,
+          219,
+          219,
+          20,
+          66,
+          88,
+          56
+        ],
+        "accounts": [
+          {
+            "name": "platform",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    108,
+                    97,
+                    116,
+                    102,
+                    111,
+                    114,
+                    109
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "presale",
+            "writable": true
+          },
+          {
+            "name": "token_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    116,
+                    111,
+                    107,
+                    101,
+                    110,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "from_token_account",
+            "writable": true
+          },
+          {
+            "name": "authority",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "token_program",
+            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          }
+        ],
+        "args": [
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      },
+      {
+        "name": "initialize_platform",
+        "docs": [
+          "Initialize the platform with owner, operator, treasury, and fee configuration"
+        ],
+        "discriminator": [
+          119,
+          201,
+          101,
+          45,
+          75,
+          122,
+          89,
+          3
+        ],
+        "accounts": [
+          {
+            "name": "platform",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    108,
+                    97,
+                    116,
+                    102,
+                    111,
+                    114,
+                    109
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "owner",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          }
+        ]
+      },
+      {
+        "name": "migrate_and_create_lp",
+        "docs": [
+          "Migrate presale and create LP"
+        ],
+        "discriminator": [
+          207,
+          230,
+          137,
+          100,
+          253,
+          244,
+          203,
+          127
+        ],
+        "accounts": [
+          {
+            "name": "platform",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    108,
+                    97,
+                    116,
+                    102,
+                    111,
+                    114,
+                    109
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "presale",
+            "writable": true
+          },
+          {
+            "name": "token_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    116,
+                    111,
+                    107,
+                    101,
+                    110,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "token_vault_authority",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    116,
+                    111,
+                    107,
+                    101,
+                    110,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "public_sol_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    117,
+                    98,
+                    108,
+                    105,
+                    99,
+                    95,
+                    115,
+                    111,
+                    108,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "ecosystem_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    101,
+                    99,
+                    111,
+                    115,
+                    121,
+                    115,
+                    116,
+                    101,
+                    109,
+                    95,
+                    118,
+                    97,
+                    117,
+                    108,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                }
+              ]
+            }
+          },
+          {
+            "name": "lp_token_account",
+            "writable": true
+          },
+          {
+            "name": "lp_sol_account",
+            "writable": true
+          },
+          {
+            "name": "treasury",
+            "writable": true
+          },
+          {
+            "name": "admin",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "token_program",
+            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "lp_sol_amount",
+            "type": "u64"
+          }
+        ]
+      },
+      {
+        "name": "whitelist_user",
+        "docs": [
+          "Whitelist a user for a presale"
+        ],
+        "discriminator": [
+          87,
+          131,
+          113,
+          110,
+          0,
+          56,
+          57,
+          209
+        ],
+        "accounts": [
+          {
+            "name": "platform",
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    108,
+                    97,
+                    116,
+                    102,
+                    111,
+                    114,
+                    109
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "presale",
+            "writable": true
+          },
+          {
+            "name": "whitelist",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    119,
+                    104,
+                    105,
+                    116,
+                    101,
+                    108,
+                    105,
+                    115,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "presale"
+                },
+                {
+                  "kind": "account",
+                  "path": "user"
+                }
+              ]
+            }
+          },
+          {
+            "name": "admin",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "user"
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "max_contribution_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    ],
+    "accounts": [
+      {
+        "name": "PlatformConfig",
+        "discriminator": [
+          160,
+          78,
+          128,
+          0,
+          248,
+          83,
+          230,
+          160
+        ]
+      },
+      {
+        "name": "Presale",
+        "discriminator": [
+          38,
+          215,
+          222,
+          14,
+          115,
+          220,
+          52,
+          168
+        ]
+      },
+      {
+        "name": "UserPosition",
+        "discriminator": [
+          251,
+          248,
+          209,
+          245,
+          83,
+          234,
+          17,
+          27
+        ]
+      },
+      {
+        "name": "WhitelistEntry",
+        "discriminator": [
+          51,
+          70,
+          173,
+          81,
+          219,
+          192,
+          234,
+          62
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "ClaimTokensEvent",
+        "discriminator": [
+          71,
+          156,
+          103,
+          32,
+          16,
+          211,
+          150,
+          191
+        ]
+      },
+      {
+        "name": "ContributePublicEvent",
+        "discriminator": [
+          163,
+          254,
+          133,
+          192,
+          137,
+          10,
+          117,
+          168
+        ]
+      },
+      {
+        "name": "FinalizePresaleEvent",
+        "discriminator": [
+          175,
+          139,
+          73,
+          50,
+          117,
+          77,
+          76,
+          121
+        ]
+      },
+      {
+        "name": "MigrateAndCreateLpEvent",
+        "discriminator": [
+          249,
+          60,
+          27,
+          158,
+          106,
+          130,
+          139,
+          124
+        ]
+      }
+    ],
+    "errors": [
+      {
+        "code": 6000,
+        "name": "Unauthorized",
+        "msg": "Unauthorized"
+      },
+      {
+        "code": 6001,
+        "name": "PresaleNotActive",
+        "msg": "Presale not active"
+      },
+      {
+        "code": 6002,
+        "name": "PresaleNotFinalized",
+        "msg": "Presale not finalized"
+      },
+      {
+        "code": 6003,
+        "name": "PresaleAlreadyFinalized",
+        "msg": "Presale already finalized"
+      },
+      {
+        "code": 6004,
+        "name": "PresaleAlreadyMigrated",
+        "msg": "Presale already migrated"
+      },
+      {
+        "code": 6005,
+        "name": "PresaleNotMigrated",
+        "msg": "Presale not migrated"
+      },
+      {
+        "code": 6006,
+        "name": "HardCapExceeded",
+        "msg": "Hard cap exceeded"
+      },
+      {
+        "code": 6007,
+        "name": "TokenCapExceeded",
+        "msg": "Token cap exceeded"
+      },
+      {
+        "code": 6008,
+        "name": "ContributionTooLarge",
+        "msg": "Contribution too large"
+      },
+      {
+        "code": 6009,
+        "name": "NotWhitelisted",
+        "msg": "Not whitelisted"
+      },
+      {
+        "code": 6010,
+        "name": "NothingToClaim",
+        "msg": "Nothing to claim"
+      },
+      {
+        "code": 6011,
+        "name": "InsufficientFunds",
+        "msg": "Insufficient funds"
+      }
+    ],
+    "types": [
+      {
+        "name": "ClaimTokensEvent",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "user",
+              "type": "pubkey"
+            },
+            {
+              "name": "presale",
+              "type": "pubkey"
+            },
+            {
+              "name": "tokens_claimed",
+              "type": "u64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "ContributePublicEvent",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "user",
+              "type": "pubkey"
+            },
+            {
+              "name": "presale",
+              "type": "pubkey"
+            },
+            {
+              "name": "amount_lamports",
+              "type": "u64"
+            },
+            {
+              "name": "tokens_allocated",
+              "type": "u64"
+            },
+            {
+              "name": "total_raised",
+              "type": "u64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "FinalizePresaleEvent",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "presale",
+              "type": "pubkey"
+            },
+            {
+              "name": "total_raised",
+              "type": "u64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "MigrateAndCreateLpEvent",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "presale",
+              "type": "pubkey"
+            },
+            {
+              "name": "lp_tokens",
+              "type": "u64"
+            },
+            {
+              "name": "lp_sol",
+              "type": "u64"
+            },
+            {
+              "name": "ecosystem_tokens",
+              "type": "u64"
+            },
+            {
+              "name": "remaining_sol_to_treasury",
+              "type": "u64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "PlatformConfig",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "owner",
+              "type": "pubkey"
+            },
+            {
+              "name": "operator",
+              "type": "pubkey"
+            },
+            {
+              "name": "treasury",
+              "type": "pubkey"
+            },
+            {
+              "name": "fee_bps",
+              "type": "u16"
+            },
+            {
+              "name": "bump",
+              "type": "u8"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Presale",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "platform",
+              "type": "pubkey"
+            },
+            {
+              "name": "authority",
+              "type": "pubkey"
+            },
+            {
+              "name": "mint",
+              "type": "pubkey"
+            },
+            {
+              "name": "public_start_ts",
+              "type": "i64"
+            },
+            {
+              "name": "public_end_ts",
+              "type": "i64"
+            },
+            {
+              "name": "public_token_cap",
+              "type": "u64"
+            },
+            {
+              "name": "lp_token_allocation",
+              "type": "u64"
+            },
+            {
+              "name": "ecosystem_allocation",
+              "type": "u64"
+            },
+            {
+              "name": "public_price_lamports_per_token",
+              "type": "u64"
+            },
+            {
+              "name": "hard_cap_lamports",
+              "type": "u64"
+            },
+            {
+              "name": "public_raised_lamports",
+              "type": "u64"
+            },
+            {
+              "name": "is_finalized",
+              "type": "bool"
+            },
+            {
+              "name": "is_migrated",
+              "type": "bool"
+            },
+            {
+              "name": "ecosystem_vault",
+              "type": "pubkey"
+            },
+            {
+              "name": "lp_authority",
+              "type": "pubkey"
+            },
+            {
+              "name": "bump",
+              "type": "u8"
+            }
+          ]
+        }
+      },
+      {
+        "name": "UserPosition",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "presale",
+              "type": "pubkey"
+            },
+            {
+              "name": "user",
+              "type": "pubkey"
+            },
+            {
+              "name": "public_contribution_lamports",
+              "type": "u64"
+            },
+            {
+              "name": "tokens_allocated",
+              "type": "u64"
+            },
+            {
+              "name": "tokens_claimed",
+              "type": "u64"
+            },
+            {
+              "name": "refunded",
+              "type": "bool"
+            },
+            {
+              "name": "bump",
+              "type": "u8"
+            }
+          ]
+        }
+      },
+      {
+        "name": "WhitelistEntry",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "presale",
+              "type": "pubkey"
+            },
+            {
+              "name": "user",
+              "type": "pubkey"
+            },
+            {
+              "name": "tier",
+              "type": "u8"
+            },
+            {
+              "name": "max_contribution_lamports",
+              "type": "u64"
+            },
+            {
+              "name": "bump",
+              "type": "u8"
+            }
+          ]
+        }
+      }
+    ]
+  }
+  

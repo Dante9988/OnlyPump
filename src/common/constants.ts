@@ -1,6 +1,5 @@
 import { PublicKey } from '@solana/web3.js';
-import onlypumpPresaleIdl from '../../onlypump-presale/target/idl/onlypump_presale.json';
-import type { OnlypumpPresale } from '../../onlypump-presale/target/types/onlypump_presale';
+import onlypumpPresaleIdl from '../idls/onlypump-presale.json';
 
 /**
  * Constants for Pump.fun and PumpSwap integration
@@ -63,4 +62,4 @@ export const ONLYPUMP_PRESALE_PROGRAM_ID = new PublicKey(
 );
 
 // Anchor IDL for the OnlyPump Presale program
-export const ONLYPUMP_PRESALE_IDL = onlypumpPresaleIdl as OnlypumpPresale;
+export const ONLYPUMP_PRESALE_IDL = onlypumpPresaleIdl;
