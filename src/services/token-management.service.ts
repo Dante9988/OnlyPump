@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Connection, Keypair, PublicKey, Transaction, ComputeBudgetProgram, VersionedTransaction, TransactionMessage } from '@solana/web3.js';
-import { PumpSdk, OnlinePumpSdk, getBuyTokenAmountFromSolAmount, getSellSolAmountFromTokenAmount } from '@pump-fun/pump-sdk';
+import {
+  PumpSdk,
+  OnlinePumpSdk,
+  bondingCurvePda,
+  getBuyTokenAmountFromSolAmount,
+  getBuySolAmountFromTokenAmount,
+  getSellSolAmountFromTokenAmount,
+} from '@pump-fun/pump-sdk';
 import { OnlinePumpAmmSdk, PUMP_AMM_SDK, canonicalPumpPoolPda } from '@pump-fun/pump-swap-sdk';
 import { ConfigService } from '@nestjs/config';
 import { VanityAddressManagerService } from './vanity-address-manager.service';
@@ -46,6 +53,7 @@ export interface TokenOperationResult {
   tokenMint?: string;
   vanityAddress?: string;
   tokenAmount?: number; // Amount of tokens (for sells)
+  tokenAmountRaw?: string; // Raw token amount (string, for large values / buys)
   solAmount?: number; // Amount of SOL (for buys/sells)
   error?: string;
 }
@@ -64,11 +72,64 @@ export class TokenManagementService {
     private jitoService: JitoService,
     private supabaseService: SupabaseService,
   ) {
-    const rpcUrl = this.configService.get<string>('SOLANA_RPC_URL') || 'https://api.devnet.solana.com';
+    const rpcUrl =
+      this.configService.get<string>('SOLANA_DEVNET_RPC_URL') ||
+      'https://api.devnet.solana.com';
     this.connection = new Connection(rpcUrl, 'confirmed');
     this.pumpSdk = new PumpSdk();
     this.onlinePumpSdk = new OnlinePumpSdk(this.connection);
     this.onlinePumpAmmSdk = new OnlinePumpAmmSdk(this.connection);
+  }
+
+  /**
+   * Read Pump.fun bonding curve status and estimate SOL required to complete the curve.
+   * This is useful for presale UIs that want to show "SOL needed to complete bonding curve".
+   */
+  async getBondingCurveCompletion(mint: string): Promise<{
+    mint: string;
+    bondingCurvePda: string;
+    complete: boolean;
+    creator: string;
+    realSolReservesLamports: string;
+    virtualSolReservesLamports: string;
+    realTokenReservesRaw: string;
+    virtualTokenReservesRaw: string;
+    tokenTotalSupplyRaw: string;
+    solToCompleteLamports: string;
+  }> {
+    const mintPk = new PublicKey(mint);
+    const global = await this.onlinePumpSdk.fetchGlobal();
+    if (!global) {
+      throw new Error('Failed to fetch Pump.fun global state');
+    }
+    const curve = await this.onlinePumpSdk.fetchBondingCurve(mintPk);
+    if (!curve) {
+      throw new Error('Failed to fetch Pump.fun bonding curve');
+    }
+
+    const remaining = curve.realTokenReserves; // BN
+    const solToComplete = curve.complete
+      ? new BN(0)
+      : getBuySolAmountFromTokenAmount({
+          global,
+          bondingCurve: curve,
+          amount: remaining,
+          feeConfig: null,
+          mintSupply: null,
+        });
+
+    return {
+      mint: mintPk.toBase58(),
+      bondingCurvePda: bondingCurvePda(mintPk).toBase58(),
+      complete: !!curve.complete,
+      creator: curve.creator.toBase58(),
+      realSolReservesLamports: curve.realSolReserves.toString(),
+      virtualSolReservesLamports: curve.virtualSolReserves.toString(),
+      realTokenReservesRaw: curve.realTokenReserves.toString(),
+      virtualTokenReservesRaw: curve.virtualTokenReserves.toString(),
+      tokenTotalSupplyRaw: curve.tokenTotalSupply.toString(),
+      solToCompleteLamports: solToComplete.toString(),
+    };
   }
 
   /**
@@ -169,16 +230,25 @@ export class TokenManagementService {
    */
   async createAndBuyToken(
     walletPublicKey: string,
-    request: CreateAndBuyTokenRequest
+    request: CreateAndBuyTokenRequest & { mintPublicKey?: string }
   ): Promise<TokenOperationResult> {
     try {
       this.logger.log(`Creating and buying token: ${request.name} (${request.symbol})`);
 
       // Get vanity address from JSON file
-      const vanityData = this.vanityAddressManager.getAvailableVanityAddress();
       let mintKeypair: Keypair;
       let vanityAddress: string | undefined;
 
+      if (request.mintPublicKey && request.mintPublicKey.trim().length > 0) {
+        const kp = this.vanityAddressManager.getKeypairForPublicKey(request.mintPublicKey);
+        if (!kp) {
+          throw new Error(`Reserved mint ${request.mintPublicKey} is not available on server`);
+        }
+        mintKeypair = kp;
+        vanityAddress = kp.publicKey.toBase58();
+        this.logger.log(`Using reserved mint: ${vanityAddress}`);
+      } else {
+        const vanityData = this.vanityAddressManager.getAvailableVanityAddress();
       if (vanityData) {
         mintKeypair = vanityData.keypair;
         vanityAddress = vanityData.publicKey;
@@ -187,6 +257,7 @@ export class TokenManagementService {
         // Fallback to random keypair if no vanity addresses available
         this.logger.warn('No vanity addresses available, using random keypair');
         mintKeypair = Keypair.generate();
+        }
       }
 
       const walletPubkey = new PublicKey(walletPublicKey);
@@ -204,23 +275,64 @@ export class TokenManagementService {
       const solAmountBN = new BN(Math.floor(request.solAmount * 1e9));
 
       // Create and buy instructions
-      const instructions = await this.pumpSdk.createAndBuyInstructions({
+      const expectedTokenAmount = getBuyTokenAmountFromSolAmount({
         global,
+        bondingCurve: null,
+        amount: solAmountBN,
+        feeConfig: null,
+        mintSupply: null,
+      });
+      /**
+       * IMPORTANT: Pump SDK v1.21.0 randomly selects a fee recipient from
+       * [global.feeRecipient, ...global.feeRecipients, ...global.reservedFeeRecipients].
+       * On devnet some entries can be non-authorized, which makes tests flaky (NotAuthorized).
+       *
+       * For deterministic behavior, always use `global.feeRecipient`.
+       */
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const spl = await import('@solana/spl-token');
+      const associatedUser = spl.getAssociatedTokenAddressSync(mintKeypair.publicKey, walletPubkey, true);
+
+      const slippage = 1; // matches pump-sdk default used in buyInstruction (1 => +1% buffer)
+      const solAmountWithSlippage = solAmountBN.add(
+        solAmountBN.mul(new BN(Math.floor(slippage * 10))).div(new BN(1e3)),
+      );
+
+      const feeRecipient = (global as any).feeRecipient;
+      if (!feeRecipient) {
+        throw new Error('Pump global missing feeRecipient');
+      }
+
+      const instructions = [
+        await this.pumpSdk.createInstruction({
         mint: mintKeypair.publicKey,
         name: request.name,
         symbol: request.symbol,
         uri: request.uri,
         creator: walletPubkey,
         user: walletPubkey,
-        solAmount: solAmountBN,
-        amount: getBuyTokenAmountFromSolAmount({
-          global,
-          bondingCurve: null,
-          amount: solAmountBN,
-          feeConfig: null,
-          mintSupply: null
         }),
-      });
+        await this.pumpSdk.extendAccountInstruction({
+          account: bondingCurvePda(mintKeypair.publicKey),
+          user: walletPubkey,
+        }),
+        spl.createAssociatedTokenAccountIdempotentInstruction(
+          walletPubkey,
+          associatedUser,
+          walletPubkey,
+          mintKeypair.publicKey,
+        ),
+        await (this.pumpSdk as any).getBuyInstructionInternal({
+          user: walletPubkey,
+          associatedUser,
+          mint: mintKeypair.publicKey,
+          creator: walletPubkey,
+          feeRecipient,
+          amount: expectedTokenAmount,
+          solAmount: solAmountWithSlippage,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        }),
+      ];
 
       // Add all instructions to the transaction
       for (const ix of instructions) {
@@ -265,7 +377,8 @@ export class TokenManagementService {
         tokenMint: mintKeypair.publicKey.toString(),
         vanityAddress,
         // Return the serialized transaction for frontend signing
-        txId: Buffer.from(serializedTransaction).toString('base64')
+        txId: Buffer.from(serializedTransaction).toString('base64'),
+        tokenAmountRaw: expectedTokenAmount.toString(),
       };
     } catch (error: any) {
       this.logger.error('Error creating and buying token:', error);

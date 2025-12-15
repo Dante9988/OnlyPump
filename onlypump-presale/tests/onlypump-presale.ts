@@ -23,6 +23,8 @@ describe("onlypump_presale", () => {
   anchor.setProvider(anchor.AnchorProvider.env());
 
   const program = anchor.workspace.onlypumpPresale as Program<OnlypumpPresale>;
+  // For newer instructions that may not yet be reflected in generated TS types
+  const anyProgram = program as any;
   const provider = anchor.getProvider();
 
   // Test accounts
@@ -113,7 +115,7 @@ describe("onlypump_presale", () => {
   it("Initializes the platform", async () => {
     const feeBps = 100; // 1% fee
 
-    const tx = await program.methods
+    const tx = await anyProgram.methods
       // Treat `authority` as the operator/admin who can fund the presale
       .initializePlatform(authority.publicKey, treasury.publicKey, feeBps)
       .accounts({
@@ -143,7 +145,7 @@ describe("onlypump_presale", () => {
 
     let tx: string;
     try {
-      tx = await program.methods
+      tx = await anyProgram.methods
         .createPresale(
           tokenMint,
           authority.publicKey,
@@ -234,7 +236,7 @@ describe("onlypump_presale", () => {
     );
 
     // Fund presale
-    const tx = await program.methods
+    const tx = await anyProgram.methods
       .fundPresaleTokens(new anchor.BN(mintAmount.toString()))
       .accounts({
         presale: presale, // Provide presale so Anchor can derive token_vault
@@ -260,7 +262,7 @@ describe("onlypump_presale", () => {
     const tier = 1; // Basic tier
     const maxContribution = new anchor.BN(10 * LAMPORTS_PER_SOL); // 10 SOL max
 
-    const tx = await program.methods
+    const tx = await anyProgram.methods
       .whitelistUser(tier, maxContribution)
       .accounts({
         presale: presale, // Provide presale so Anchor can derive whitelist
@@ -296,7 +298,7 @@ describe("onlypump_presale", () => {
 
     const contributionAmount = new anchor.BN(1 * LAMPORTS_PER_SOL); // 1 SOL
 
-    const tx = await program.methods
+    const tx = await anyProgram.methods
       .contributePublic(contributionAmount)
       .accounts({
         presale: presale, // Provide presale so Anchor can derive publicSolVault and userPosition
@@ -326,7 +328,7 @@ describe("onlypump_presale", () => {
     // In a real test, you'd wait for the end time or use clockwork
     // For now, we'll call it directly (assuming admin can finalize early in dev)
 
-    const tx = await program.methods
+    const tx = await anyProgram.methods
       .finalizePresale()
       .accounts({
         presale: presale, // Provide presale explicitly
@@ -374,7 +376,7 @@ describe("onlypump_presale", () => {
 
     const lpSolAmount = new anchor.BN(0.5 * LAMPORTS_PER_SOL); // 0.5 SOL for LP
 
-    const tx = await program.methods
+    const tx = await anyProgram.methods
       .migrateAndCreateLp(lpSolAmount)
       .accounts({
         presale: presale, // Provide presale so Anchor can derive token_vault, ecosystem_vault, etc.
@@ -448,5 +450,128 @@ describe("onlypump_presale", () => {
     // Verify position updated
     const positionAfter = await program.account.userPosition.fetch(userPosition);
     expect(positionAfter.tokensClaimed.toString()).to.equal(tokensToClaim.toString());
+  });
+
+  it("Supports voting and refunds when presale underperforms", async () => {
+    // Create a new mint and presale specifically for refund testing
+    const refundMint = await createMint(
+      provider.connection,
+      authority, // payer
+      authority.publicKey,
+      null,
+      TOKEN_DECIMALS
+    );
+
+    const [refundPresalePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("presale"), refundMint.toBuffer()],
+      program.programId
+    );
+
+    const [refundPublicSolVault] = PublicKey.findProgramAddressSync(
+      [Buffer.from("public_sol_vault"), refundPresalePda.toBuffer()],
+      program.programId
+    );
+
+    const now = Math.floor(Date.now() / 1000);
+    const publicStartTs = new anchor.BN(now + 10);
+    const publicEndTs = new anchor.BN(now + 3600);
+    const publicPriceLamportsPerToken = new anchor.BN(1_000_000); // 0.001 SOL
+    const hardCapLamports = new anchor.BN(400 * LAMPORTS_PER_SOL); // 400 SOL
+
+    // Create a second presale
+    await anyProgram.methods
+      .createPresale(
+        refundMint,
+        authority.publicKey,
+        publicStartTs,
+        publicEndTs,
+        publicPriceLamportsPerToken,
+        hardCapLamports
+      )
+      .accounts({
+        admin: owner.publicKey,
+        mint: refundMint,
+      })
+      .signers([owner])
+      .rpc();
+
+    // Contribute a small amount from the existing user
+    const [refundUserPosition] = PublicKey.findProgramAddressSync(
+      [Buffer.from("position"), refundPresalePda.toBuffer(), user.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const contributionAmount = new anchor.BN(1 * LAMPORTS_PER_SOL);
+
+    await anyProgram.methods
+      .contributePublic(contributionAmount)
+      .accounts({
+        presale: refundPresalePda,
+        publicSolVault: refundPublicSolVault,
+        userPosition: refundUserPosition,
+        user: user.publicKey,
+        whitelist: null,
+      })
+      .signers([user])
+      .rpc();
+
+    // Start a vote (admin-triggered) that ends shortly
+    const votingEndsTs = new anchor.BN(Math.floor(Date.now() / 1000) + 30);
+
+    await (program as any).methods
+      .startVote(votingEndsTs)
+      .accounts({
+        platform: platformConfig,
+        presale: refundPresalePda,
+        admin: owner.publicKey,
+      })
+      .signers([owner])
+      .rpc();
+
+    // User votes for refund (supportLaunch = false)
+    await (program as any).methods
+      .castVote(false)
+      .accounts({
+        presale: refundPresalePda,
+        userPosition: refundUserPosition,
+        voter: user.publicKey,
+      })
+      .signers([user])
+      .rpc();
+
+    // Wait for voting window to end
+    await new Promise((resolve) => setTimeout(resolve, 35_000));
+
+    await (program as any).methods
+      .resolveVote()
+      .accounts({
+        presale: refundPresalePda,
+      })
+      .rpc();
+
+    const refundPresaleAccount: any = await program.account.presale.fetch(refundPresalePda);
+    expect(refundPresaleAccount.refundEnabled).to.be.true;
+
+    // Record user balance before refund
+    const balanceBefore = await provider.connection.getBalance(user.publicKey);
+
+    // Claim refund
+    await (program as any).methods
+      .claimRefund()
+      .accounts({
+        presale: refundPresalePda,
+        publicSolVault: refundPublicSolVault,
+        userPosition: refundUserPosition,
+        user: user.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    const balanceAfter = await provider.connection.getBalance(user.publicKey);
+    expect(balanceAfter).to.be.greaterThan(balanceBefore);
+
+    const refundPosition = await program.account.userPosition.fetch(refundUserPosition);
+    expect(refundPosition.refunded).to.be.true;
   });
 });

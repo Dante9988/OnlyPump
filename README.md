@@ -106,6 +106,42 @@ This approach ensures:
 
 Swagger documentation is available at `http://localhost:3000/api/docs` when the backend is running.
 
+## Presale (devnet) – current status
+
+### What’s working end-to-end
+
+- The presale program + NestJS API support a full flow on devnet:
+  - VIP whitelist + VIP contribution
+  - Public (non-whitelisted) contribution
+  - Vote → LAUNCH resolution
+  - Creator withdraws presale SOL
+  - Creator creates+buys Pump.fun token with reserved mint
+  - Presale vaults are initialized
+  - Presale is funded with **50% of bought tokens**
+
+### Deployed devnet token we’re continuing with
+
+- **Mint (devnet)**: `4EQqXuvGNnnnwNaeqtFZjcGWpepifFUL9UwK7LqPBfan`
+- **Bonding curve status (devnet)**: not complete yet (`complete = false`)
+- **Estimated SOL to complete curve (at current state)**: **~22.18 SOL**
+
+### Tomorrow’s migration plan
+
+We will test **Pump.fun → PumpSwap** migration by completing the bonding curve and running Pump’s `migrate` instruction.
+
+- Current devnet wallet balance: **~11.39 SOL**
+- We need ~**10 SOL more** (airdrop) to finish the large buy required to complete the curve.
+
+### New API: bonding curve completion estimate
+
+- `GET /api/presale/:mint/bonding-curve`
+  - Returns Pump.fun bonding curve reserves and `solToCompleteLamports` so the presale UI can show “SOL needed to complete”.
+
+### Next steps (claims + refunds)
+
+- **Claiming**: public presale users should claim their portion **after the token has migrated to PumpSwap** (bonding curve complete + migrate). We’ll wire the claim UX/testing around the current devnet mint above.
+- **Refunds**: if a token is stuck and not migrating, users can request a refund. Refunds unlock **48 hours** after request/time window and become claimable on-chain. This will require a small presale program update plus e2e coverage.
+
 ### Key Endpoints (Read Operations)
 
 - `GET /api/pump-fun/token-info/:tokenMint`: Get information about a token

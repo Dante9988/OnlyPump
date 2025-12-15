@@ -26,6 +26,11 @@ The NestJS backend provides RESTful APIs for:
 
 All token operations return serialized transactions that must be signed by the user's wallet on the frontend before being sent to the Solana blockchain.
 
+## Presale workstream
+
+For the current presale devnet status + migration/claim/refund roadmap, see:
+- `NESTJS_PRESALE_NEXT_STEPS.md`
+
 ## Project Structure
 
 ```

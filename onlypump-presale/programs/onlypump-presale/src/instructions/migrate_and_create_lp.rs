@@ -3,6 +3,7 @@ use anchor_spl::token::{self, Transfer};
 use crate::state::accounts::MigrateAndCreateLp;
 use crate::errors::PresaleError;
 use crate::events::MigrateAndCreateLpEvent;
+use crate::instructions::vote::phase;
 
 /// Migrate presale and create LP
 /// Admin-only
@@ -23,6 +24,13 @@ pub fn migrate_and_create_lp(
     let presale = &mut ctx.accounts.presale;
 
     require!(presale.is_finalized, PresaleError::PresaleNotFinalized);
+    // If a vote occurred, ensure we are in the Launchable phase (or already launched)
+    if presale.outcome != crate::instructions::vote::outcome::UNDECIDED {
+        require!(
+            presale.phase == phase::LAUNCHABLE || presale.phase == phase::LAUNCHED,
+            PresaleError::PresaleNotFinalized
+        );
+    }
     require!(!presale.is_migrated, PresaleError::PresaleAlreadyMigrated);
 
     // Transfer LP tokens (300M) from token_vault to lp_token_account
@@ -78,6 +86,7 @@ pub fn migrate_and_create_lp(
 
     // Mark as migrated
     presale.is_migrated = true;
+    presale.phase = phase::LAUNCHED;
 
     // TODO: Stub for actual LP creation CPI
     // In production, this would call Raydium or PumpSwap to create the LP

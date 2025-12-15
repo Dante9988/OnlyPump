@@ -163,5 +163,50 @@ export class VanityAddressManagerService {
   isAvailable(publicKey: string): boolean {
     return !this.usedAddresses.has(publicKey);
   }
+
+  /**
+   * Resolve a vanity mint Keypair by its public key.
+   *
+   * This avoids sending mint secret keys over the network. The server looks up the keypair from the
+   * vanity pool and can partially sign Pump.fun create/create+buy transactions.
+   */
+  getKeypairForPublicKey(publicKey: string): Keypair | null {
+    if (!publicKey) return null;
+    const match = this.keypairs.find((k) => k.public_key === publicKey);
+    if (!match) return null;
+
+    try {
+      const bs58Module = require('bs58');
+      const bs58 = bs58Module.default || bs58Module;
+      const privateKeyBytes = bs58.decode(match.private_key);
+      if (privateKeyBytes.length !== 64) {
+        this.logger.error(
+          `Unexpected secret key length for ${match.public_key}: ${privateKeyBytes.length} bytes (expected 64)`,
+        );
+        return null;
+      }
+
+      const kp = Keypair.fromSecretKey(new Uint8Array(privateKeyBytes));
+      if (kp.publicKey.toBase58() !== match.public_key) {
+        this.logger.error(
+          `Vanity keypair mismatch for ${match.public_key}: derived ${kp.publicKey.toBase58()}`,
+        );
+        return null;
+      }
+
+      // Mark as used (idempotent) so it won't be re-assigned later.
+      if (!this.usedAddresses.has(match.public_key)) {
+        this.usedAddresses.add(match.public_key);
+        this.saveUsedAddresses();
+      }
+
+      return kp;
+    } catch (e) {
+      this.logger.error(
+        `Error resolving vanity keypair for ${publicKey}: ${(e as Error).message}`,
+      );
+      return null;
+    }
+  }
 }
 

@@ -267,5 +267,35 @@ export class SupabaseService implements OnModuleInit {
 
     return data;
   }
+
+  // Presale metadata methods
+  async createPresaleRecord(presale: {
+    presale_pda: string;
+    mint?: string | null;
+    name: string;
+    symbol: string;
+    description?: string;
+    creator_wallet: string;
+  }) {
+    const { data, error } = await this.supabase
+      .from('presales')
+      .insert({
+        presale_pda: presale.presale_pda,
+        mint: presale.mint ?? null,
+        name: presale.name,
+        symbol: presale.symbol,
+        description: presale.description,
+        creator_wallet: presale.creator_wallet,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error('Error creating presale record:', error);
+      throw error;
+    }
+
+    return data;
+  }
 }
 

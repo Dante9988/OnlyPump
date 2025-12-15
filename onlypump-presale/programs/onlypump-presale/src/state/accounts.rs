@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
-    token::{Token, TokenAccount},
+    token::{Token, TokenAccount, Mint},
 };
 use crate::state::data::*;
 use crate::utils::assert_admin;
@@ -34,9 +33,34 @@ pub struct CreatePresale<'info> {
         init,
         payer = admin,
         space = 8 + Presale::LEN,
-        seeds = [b"presale", mint.key().as_ref()],
+        seeds = [b"presale", mint_pubkey.key().as_ref()],
         bump
     )]
+    pub presale: Account<'info, Presale>,
+    #[account(
+        init,
+        payer = admin,
+        space = 8,
+        seeds = [b"public_sol_vault", presale.key().as_ref()],
+        bump
+    )]
+    /// CHECK: Public SOL vault PDA (regular account, not token account)
+    pub public_sol_vault: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    /// CHECK: Token mint pubkey (token doesn't need to exist yet)
+    pub mint_pubkey: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeVaults<'info> {
+    #[account(
+        seeds = [b"platform"],
+        bump = platform.bump
+    )]
+    pub platform: Account<'info, PlatformConfig>,
+    #[account(mut)]
     pub presale: Account<'info, Presale>,
     #[account(
         init,
@@ -51,7 +75,7 @@ pub struct CreatePresale<'info> {
         seeds = [b"token_vault", presale.key().as_ref()],
         bump
     )]
-    /// CHECK: Token vault authority PDA (same as token_vault for PDA-owned accounts)
+    /// CHECK: Token vault authority PDA
     pub token_vault_authority: UncheckedAccount<'info>,
     #[account(
         init,
@@ -68,27 +92,50 @@ pub struct CreatePresale<'info> {
     )]
     /// CHECK: Ecosystem vault authority PDA
     pub ecosystem_vault_authority: UncheckedAccount<'info>,
-    #[account(
-        init,
-        payer = admin,
-        space = 8,
-        seeds = [b"public_sol_vault", presale.key().as_ref()],
-        bump
-    )]
-    /// CHECK: Public SOL vault PDA
-    pub public_sol_vault: UncheckedAccount<'info>,
     #[account(mut)]
     pub admin: Signer<'info>,
-    /// CHECK: Token mint
-    pub mint: UncheckedAccount<'info>,
+    pub mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 impl<'info> CreatePresale<'info> {
     pub fn validate(&self) -> Result<()> {
         assert_admin(&self.platform, &self.admin.key())?;
+        Ok(())
+    }
+}
+
+impl<'info> InitializeVaults<'info> {
+    pub fn validate(&self) -> Result<()> {
+        assert_admin(&self.platform, &self.admin.key())?;
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct WithdrawForLaunch<'info> {
+    #[account(mut)]
+    pub presale: Account<'info, Presale>,
+    #[account(
+        mut,
+        seeds = [b"public_sol_vault", presale.key().as_ref()],
+        bump
+    )]
+    /// CHECK: Public SOL vault PDA
+    pub public_sol_vault: UncheckedAccount<'info>,
+    /// CHECK: Authority who can withdraw (presale.authority)
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+impl<'info> WithdrawForLaunch<'info> {
+    pub fn validate(&self) -> Result<()> {
+        require!(
+            self.authority.key() == self.presale.authority,
+            crate::errors::PresaleError::Unauthorized
+        );
         Ok(())
     }
 }
@@ -176,6 +223,74 @@ pub struct ContributePublic<'info> {
     pub user: Signer<'info>,
     /// CHECK: Optional whitelist entry
     pub whitelist: Option<Account<'info, WhitelistEntry>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct StartVote<'info> {
+    #[account(
+        seeds = [b"platform"],
+        bump = platform.bump
+    )]
+    pub platform: Account<'info, PlatformConfig>,
+    #[account(mut)]
+    pub presale: Account<'info, Presale>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+}
+
+impl<'info> StartVote<'info> {
+    pub fn validate(&self) -> Result<()> {
+        assert_admin(&self.platform, &self.admin.key())?;
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct CastVote<'info> {
+    #[account(mut)]
+    pub presale: Account<'info, Presale>,
+    #[account(
+        mut,
+        seeds = [b"position", presale.key().as_ref(), voter.key().as_ref()],
+        bump = user_position.bump
+    )]
+    pub user_position: Account<'info, UserPosition>,
+    #[account(mut)]
+    pub voter: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ResolveVote<'info> {
+    #[account(mut)]
+    pub presale: Account<'info, Presale>,
+}
+
+#[derive(Accounts)]
+pub struct EnableRefundsIfDeadlinePassed<'info> {
+    #[account(mut)]
+    pub presale: Account<'info, Presale>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimRefund<'info> {
+    #[account(mut)]
+    pub presale: Account<'info, Presale>,
+    #[account(
+        mut,
+        seeds = [b"public_sol_vault", presale.key().as_ref()],
+        bump
+    )]
+    /// CHECK: Public SOL vault holding contributions
+    pub public_sol_vault: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        seeds = [b"position", presale.key().as_ref(), user.key().as_ref()],
+        bump = user_position.bump
+    )]
+    pub user_position: Account<'info, UserPosition>,
+    #[account(mut)]
+    pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 

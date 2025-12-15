@@ -1,5 +1,8 @@
 import { PublicKey } from '@solana/web3.js';
-import onlypumpPresaleIdl from '../idls/onlypump-presale.json';
+// Import JSON IDL in a way that works both in ts-node/ts-jest and compiled code
+// (some toolchains wrap JSON under `.default`).
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const onlypumpPresaleIdlModule = require('../idls/onlypump-presale.json');
 
 /**
  * Constants for Pump.fun and PumpSwap integration
@@ -62,4 +65,12 @@ export const ONLYPUMP_PRESALE_PROGRAM_ID = new PublicKey(
 );
 
 // Anchor IDL for the OnlyPump Presale program
-export const ONLYPUMP_PRESALE_IDL = onlypumpPresaleIdl;
+export const ONLYPUMP_PRESALE_IDL =
+  (onlypumpPresaleIdlModule as any).default ?? onlypumpPresaleIdlModule;
+
+// Platform fee configuration
+export const PLATFORM_FEE_BPS = 5000; // 50% (5000 basis points)
+export const PLATFORM_FEE_VAULT = new PublicKey(
+  process.env.PLATFORM_FEE_VAULT ||
+  'GabbUP6ZtU9iQkBr1AR9PzhiEqfvb3Rxc2wYpySAkxjF' // Default to admin wallet
+);

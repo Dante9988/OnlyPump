@@ -13,6 +13,7 @@ import { SupabaseService } from './services/supabase.service';
 import { PriceService } from './services/price.service';
 import { WalletMiddleware } from './api/middleware/wallet.middleware';
 import supabaseConfig from './config/supabase.config';
+import { PresaleModule } from './modules/presale/presale.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import supabaseConfig from './config/supabase.config';
       isGlobal: true,
       load: [supabaseConfig],
     }),
+    PresaleModule,
   ],
   controllers: [
     TokenManagementController,
@@ -37,6 +39,7 @@ import supabaseConfig from './config/supabase.config';
       provide: Connection,
       useFactory: (configService: ConfigService) => {
         const rpcUrl =
+          configService.get<string>('SOLANA_DEVNET_RPC_URL') ||
           configService.get<string>('SOLANA_RPC_URL') ||
           'https://api.devnet.solana.com';
         return new Connection(rpcUrl, 'confirmed');
