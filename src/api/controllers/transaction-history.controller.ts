@@ -1,16 +1,24 @@
-import { Controller, Get, Post, Req, Query, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Query, Param, Body, Req, UseGuards, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { Request } from 'express';
 import { TransactionHistoryService, TransactionType } from '../../services/transaction-history.service';
 import { TransactionRecordDto, WalletStatsDto } from '../dto/transaction.dto';
+import { XRequestSignatureGuard } from '../guards/x-request-signature.guard';
 
 @ApiTags('Transaction History')
 @Controller('api/transactions')
 @ApiHeader({
   name: 'x-request-signature',
-  description: 'Base64 encoded signature of the authentication message',
+  description:
+    'JSON payload with wallet, signature, timestamp, nonce, method, path, bodyHash (same format as /api/presale/* and /api/tokens/*)',
   required: true,
 })
+@ApiHeader({
+  name: 'x-solana-cluster',
+  description: 'Target Solana cluster: devnet | mainnet-beta (default: devnet)',
+  required: false,
+})
+@UseGuards(XRequestSignatureGuard)
 export class TransactionHistoryController {
   constructor(
     private readonly transactionHistoryService: TransactionHistoryService,
@@ -44,8 +52,13 @@ export class TransactionHistoryController {
     type: WalletStatsDto 
   })
   async getStats(
+    @Req() req: Request,
     @Param('walletAddress') walletAddress: string,
   ): Promise<WalletStatsDto> {
+    const authedWallet = (req as any)?.user?.walletPubkey || (req as any)?.walletAddress;
+    if (authedWallet && authedWallet !== walletAddress) {
+      throw new UnauthorizedException('walletAddress does not match authenticated wallet');
+    }
     return this.transactionHistoryService.getWalletStats(walletAddress);
   }
 
@@ -72,10 +85,15 @@ export class TransactionHistoryController {
     type: [TransactionRecordDto] 
   })
   async getTransactions(
+    @Req() req: Request,
     @Param('walletAddress') walletAddress: string,
     @Query('type') type?: TransactionType,
     @Query('limit') limit?: number,
   ): Promise<TransactionRecordDto[]> {
+    const authedWallet = (req as any)?.user?.walletPubkey || (req as any)?.walletAddress;
+    if (authedWallet && authedWallet !== walletAddress) {
+      throw new UnauthorizedException('walletAddress does not match authenticated wallet');
+    }
     const transactions = await this.transactionHistoryService.getWalletTransactions(
       walletAddress,
       type,

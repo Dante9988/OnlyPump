@@ -17,6 +17,7 @@ interface SignaturePayload {
   method: string;
   path: string;
   bodyHash: string;
+  cluster?: string;
 }
 
 /**
@@ -53,6 +54,7 @@ export class XRequestSignatureGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     const header = req.headers['x-request-signature'];
+    const clusterHeader = req.headers['x-solana-cluster'];
 
     if (!header || typeof header !== 'string') {
       throw new UnauthorizedException('Missing x-request-signature header');
@@ -69,6 +71,24 @@ export class XRequestSignatureGuard implements CanActivate {
     const { wallet, signature, timestamp, nonce, method, path, bodyHash } = payload;
     if (!wallet || !signature || !timestamp || !nonce || !method || !path || !bodyHash) {
       throw new UnauthorizedException('Incomplete x-request-signature payload');
+    }
+
+    const cluster =
+      (typeof payload.cluster === 'string' && payload.cluster.trim()) ||
+      (typeof clusterHeader === 'string' && clusterHeader.trim()) ||
+      'devnet';
+    const normalizedCluster =
+      cluster.toLowerCase() === 'mainnet' ? 'mainnet-beta' : cluster.toLowerCase();
+    if (normalizedCluster !== 'devnet' && normalizedCluster !== 'mainnet-beta') {
+      throw new UnauthorizedException(`Unsupported Solana cluster: ${normalizedCluster}`);
+    }
+    // If both provided, enforce they match
+    if (
+      typeof payload.cluster === 'string' &&
+      typeof clusterHeader === 'string' &&
+      payload.cluster.trim().toLowerCase() !== clusterHeader.trim().toLowerCase()
+    ) {
+      throw new UnauthorizedException('Cluster mismatch between header and signature payload');
     }
 
     const now = Date.now();
@@ -104,7 +124,19 @@ export class XRequestSignatureGuard implements CanActivate {
     }
 
     // Build canonical message to verify with wallet
-    const message = [
+    const messageV2 = [
+      `method:${method.toUpperCase()}`,
+      `path:${path}`,
+      `timestamp:${timestamp}`,
+      `nonce:${nonce}`,
+      `bodyHash:${bodyHash}`,
+      `cluster:${normalizedCluster}`,
+    ].join('|');
+
+    // Backward compatibility:
+    // - Old clients didn't include cluster in the signed message.
+    // - We ONLY allow v1 when cluster was not explicitly provided and resolves to devnet.
+    const messageV1 = [
       `method:${method.toUpperCase()}`,
       `path:${path}`,
       `timestamp:${timestamp}`,
@@ -112,14 +144,24 @@ export class XRequestSignatureGuard implements CanActivate {
       `bodyHash:${bodyHash}`,
     ].join('|');
 
-    const isValid = this.walletAuthService.verifySignature(wallet, signature, message);
-    if (!isValid) {
+    const hasExplicitCluster =
+      (typeof payload.cluster === 'string' && payload.cluster.trim().length > 0) ||
+      (typeof clusterHeader === 'string' && clusterHeader.trim().length > 0);
+
+    const isValidV2 = this.walletAuthService.verifySignature(wallet, signature, messageV2);
+    const isValidV1 =
+      !hasExplicitCluster &&
+      normalizedCluster === 'devnet' &&
+      this.walletAuthService.verifySignature(wallet, signature, messageV1);
+
+    if (!isValidV2 && !isValidV1) {
       throw new UnauthorizedException('Invalid wallet signature');
     }
 
     // Attach user context to request for downstream handlers
     (req as any).walletAddress = wallet;
     (req as any).user = { walletPubkey: wallet };
+    (req as any).solanaCluster = normalizedCluster;
 
     return true;
   }

@@ -10,7 +10,9 @@ async function bootstrap() {
   // Set up BigInt serialization before anything else
   const cleanupBigIntSerialization = setupBigIntSerialization();
   
-  const app = await NestFactory.create(AppModule);
+  // Enable rawBody so XRequestSignatureGuard can reliably hash the exact JSON payload
+  // (prevents subtle stringify/ordering differences between client and server).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   
   // Enable CORS
   app.enableCors();

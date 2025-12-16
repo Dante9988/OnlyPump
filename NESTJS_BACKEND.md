@@ -100,8 +100,15 @@ yarn start:dev
 Create a `.env` file in the root directory:
 
 ```env
-# Solana RPC URL (defaults to devnet)
-SOLANA_RPC_URL=https://api.devnet.solana.com
+# Solana cluster selection (default: devnet)
+# Supported: devnet | mainnet-beta
+SOLANA_CLUSTER=devnet
+
+# RPC endpoints
+# - Devnet uses SOLANA_RPC_URL_DEVNET
+# - Mainnet uses SOLANA_RPC_URL_MAINNET
+SOLANA_RPC_URL_DEVNET=https://api.devnet.solana.com
+SOLANA_RPC_URL_MAINNET=https://api.mainnet-beta.solana.com
 
 # Server port (defaults to 3000)
 PORT=3000
@@ -123,6 +130,16 @@ PRIORITY_FEE_TURBO=100000
 
 - **Devnet**: `https://api.devnet.solana.com`
 - **Mainnet**: Use a high-performance RPC provider (e.g., Helius, QuickNode)
+
+### Per-request cluster (network-agnostic backend)
+
+Most endpoints accept an optional header:
+
+```http
+x-solana-cluster: devnet | mainnet-beta
+```
+
+If omitted, the backend defaults to **devnet**. Your frontend should set this header to match the user's wallet network (e.g., Phantom on mainnet).
 
 ### Program IDs
 
@@ -169,11 +186,20 @@ Once the server is running, visit:
 
 ### Token Management
 
+#### Network selection header
+
+All `/api/tokens/*` endpoints support:
+
+```http
+x-solana-cluster: devnet | mainnet-beta
+```
+
 #### Create Token
 ```http
 POST /api/tokens/create
 Headers:
   x-request-signature: <base64_signature>
+  x-solana-cluster: devnet | mainnet-beta   # optional (default: devnet)
 Body:
   {
     "name": "My Token",
@@ -201,6 +227,7 @@ Body:
 POST /api/tokens/buy
 Headers:
   x-request-signature: <base64_signature>
+  x-solana-cluster: devnet | mainnet-beta   # optional (default: devnet)
 Body:
   {
     "tokenMint": "token_mint_address",
@@ -285,7 +312,8 @@ Body:
 ```http
 GET /api/transactions/:walletAddress?type=BUY&limit=10
 Headers:
-  x-request-signature: <base64_signature>
+  x-request-signature: <json_signature_payload>
+  x-solana-cluster: devnet | mainnet-beta   # optional (default: devnet)
 ```
 
 **Query Parameters:**
@@ -312,7 +340,8 @@ Headers:
 ```http
 GET /api/transactions/:walletAddress/stats
 Headers:
-  x-request-signature: <base64_signature>
+  x-request-signature: <json_signature_payload>
+  x-solana-cluster: devnet | mainnet-beta   # optional (default: devnet)
 ```
 
 **Response:**

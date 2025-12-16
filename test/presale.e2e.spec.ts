@@ -58,6 +58,7 @@ function buildSignatureHeader(
   path: string,
   body: any,
   secretKey: Uint8Array,
+  cluster: 'devnet' | 'mainnet-beta' = 'devnet',
 ): string {
   const timestamp = Date.now();
   const nonce = `${timestamp}-${Math.random().toString(36).slice(2)}`;
@@ -70,6 +71,7 @@ function buildSignatureHeader(
     `timestamp:${timestamp}`,
     `nonce:${nonce}`,
     `bodyHash:${bodyHash}`,
+    `cluster:${cluster}`,
   ].join('|');
 
   const signatureBytes = nacl.sign.detached(
@@ -86,6 +88,7 @@ function buildSignatureHeader(
     method,
     path,
     bodyHash,
+    cluster,
   });
 }
 
@@ -196,10 +199,11 @@ describe('Presale API (integration, devnet)', () => {
     let res;
     try {
       res = await axios.post(`${baseUrl}/api/presale`, body, {
-        headers: {
-          'x-request-signature': header,
-        },
-      });
+      headers: {
+        'x-request-signature': header,
+        'x-solana-cluster': 'devnet',
+      },
+    });
     } catch (error: any) {
       // Log the error details for debugging
       console.error('Error response:', error.response?.data);
@@ -228,7 +232,7 @@ describe('Presale API (integration, devnet)', () => {
     tx.sign(kp);
     
     const txSig = await connection.sendRawTransaction(tx.serialize());
-    
+
     // Log devnet Explorer link for manual inspection
     // eslint-disable-next-line no-console
     console.log(`Devnet presale create tx: ${txSig}`);
@@ -300,7 +304,7 @@ describe('Presale API (integration, devnet)', () => {
     );
 
     const createRes = await axios.post(`${baseUrl}/api/presale`, createBody, {
-      headers: { 'x-request-signature': createHeader },
+      headers: { 'x-request-signature': createHeader, 'x-solana-cluster': 'devnet' },
     });
 
     const createTx = Transaction.from(Buffer.from(createRes.data.transaction, 'base64'));
@@ -329,7 +333,7 @@ describe('Presale API (integration, devnet)', () => {
     const whitelistRes = await axios.post(
       `${baseUrl}/api/presale/${vanityAddress.public_key}/whitelist`,
       whitelistBody,
-      { headers: { 'x-request-signature': whitelistHeader } }
+      { headers: { 'x-request-signature': whitelistHeader, 'x-solana-cluster': 'devnet' } }
     );
 
     const whitelistTx = Transaction.from(Buffer.from(whitelistRes.data.transaction, 'base64'));
@@ -358,7 +362,7 @@ describe('Presale API (integration, devnet)', () => {
       contributeRes = await axios.post(
         `${baseUrl}/api/presale/${vanityAddress.public_key}/contribute`,
         contributeBody,
-        { headers: { 'x-request-signature': contributeHeader } }
+        { headers: { 'x-request-signature': contributeHeader, 'x-solana-cluster': 'devnet' } }
       );
     } catch (error: any) {
       console.error('Contribute error:', error.response?.data);
@@ -428,7 +432,7 @@ describe('Presale API (integration, devnet)', () => {
       publicContributeRes = await axios.post(
         `${baseUrl}/api/presale/${vanityAddress.public_key}/contribute`,
         publicContributeBody,
-        { headers: { 'x-request-signature': publicContributeHeader } },
+        { headers: { 'x-request-signature': publicContributeHeader, 'x-solana-cluster': 'devnet' } },
       );
     } catch (error: any) {
       console.error('Public contribute error:', error.response?.data);
@@ -476,7 +480,7 @@ describe('Presale API (integration, devnet)', () => {
     const finalizeRes = await axios.post(
       `${baseUrl}/api/presale/${vanityAddress.public_key}/finalize`,
       {},
-      { headers: { 'x-request-signature': finalizeHeader } }
+      { headers: { 'x-request-signature': finalizeHeader, 'x-solana-cluster': 'devnet' } }
     );
 
     const finalizeTx = Transaction.from(Buffer.from(finalizeRes.data.transaction, 'base64'));
@@ -501,7 +505,7 @@ describe('Presale API (integration, devnet)', () => {
     const startVoteRes = await axios.post(
       `${baseUrl}/api/presale/${vanityAddress.public_key}/start-vote`,
       startVoteBody,
-      { headers: { 'x-request-signature': startVoteHeader } }
+      { headers: { 'x-request-signature': startVoteHeader, 'x-solana-cluster': 'devnet' } }
     );
 
     const startVoteTx = Transaction.from(Buffer.from(startVoteRes.data.transaction, 'base64'));
@@ -525,7 +529,7 @@ describe('Presale API (integration, devnet)', () => {
     const castVoteRes = await axios.post(
       `${baseUrl}/api/presale/${vanityAddress.public_key}/cast-vote`,
       castVoteBody,
-      { headers: { 'x-request-signature': castVoteHeader } }
+      { headers: { 'x-request-signature': castVoteHeader, 'x-solana-cluster': 'devnet' } }
     );
 
     const castVoteTx = Transaction.from(Buffer.from(castVoteRes.data.transaction, 'base64'));
@@ -556,7 +560,7 @@ describe('Presale API (integration, devnet)', () => {
       finalizeVoteRes = await axios.post(
         `${baseUrl}/api/presale/${vanityAddress.public_key}/finalize-vote`,
         {},
-        { headers: { 'x-request-signature': finalizeVoteHeader } }
+        { headers: { 'x-request-signature': finalizeVoteHeader, 'x-solana-cluster': 'devnet' } }
       );
     } catch (error: any) {
       console.error('Finalize vote error:', error.response?.data);
@@ -601,7 +605,7 @@ describe('Presale API (integration, devnet)', () => {
       launchRes = await axios.post(
         `${baseUrl}/api/presale/${vanityAddress.public_key}/launch`,
         launchBody,
-        { headers: { 'x-request-signature': launchHeader } }
+        { headers: { 'x-request-signature': launchHeader, 'x-solana-cluster': 'devnet' } }
       );
     } catch (error: any) {
       console.error('Launch error:', error.response?.data);

@@ -12,7 +12,7 @@ const onlypumpPresaleIdlModule = require('../idls/onlypump-presale.json');
  * - PumpSwap: pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA
  * 
  * The SDKs automatically use the correct network based on the RPC connection.
- * Set SOLANA_RPC_URL to devnet or mainnet RPC endpoint.
+ * Set SOLANA_RPC_URL_DEVNET / SOLANA_RPC_URL_MAINNET to devnet or mainnet RPC endpoint.
  */
 
 // Program IDs (same on devnet and mainnet)

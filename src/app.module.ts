@@ -1,9 +1,9 @@
 import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { Connection } from '@solana/web3.js';
 import { TokenManagementController } from './api/controllers/token-management.controller';
 import { TransactionHistoryController } from './api/controllers/transaction-history.controller';
 import { HealthController } from './api/controllers/health.controller';
+import { TokensVanityController } from './api/controllers/tokens-vanity.controller';
 import { JitoService } from './services/jito.service';
 import { TokenManagementService } from './services/token-management.service';
 import { WalletAuthService } from './services/wallet-auth.service';
@@ -14,6 +14,8 @@ import { PriceService } from './services/price.service';
 import { WalletMiddleware } from './api/middleware/wallet.middleware';
 import supabaseConfig from './config/supabase.config';
 import { PresaleModule } from './modules/presale/presale.module';
+import { SolanaModule } from './modules/solana/solana.module';
+import { XRequestSignatureGuard } from './api/guards/x-request-signature.guard';
 
 @Module({
   imports: [
@@ -21,10 +23,12 @@ import { PresaleModule } from './modules/presale/presale.module';
       isGlobal: true,
       load: [supabaseConfig],
     }),
+    SolanaModule,
     PresaleModule,
   ],
   controllers: [
     TokenManagementController,
+    TokensVanityController,
     TransactionHistoryController,
     HealthController,
   ],
@@ -35,34 +39,16 @@ import { PresaleModule } from './modules/presale/presale.module';
     VanityAddressManagerService,
     SupabaseService,
     PriceService,
-    {
-      provide: Connection,
-      useFactory: (configService: ConfigService) => {
-        const rpcUrl =
-          configService.get<string>('SOLANA_DEVNET_RPC_URL') ||
-          configService.get<string>('SOLANA_RPC_URL') ||
-          'https://api.devnet.solana.com';
-        return new Connection(rpcUrl, 'confirmed');
-      },
-      inject: [ConfigService],
-    },
     TransactionHistoryService,
+    XRequestSignatureGuard,
   ],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(WalletMiddleware)
-      .forRoutes(
-        { path: 'api/tokens/create', method: RequestMethod.POST },
-        { path: 'api/tokens/create-and-buy', method: RequestMethod.POST },
-        { path: 'api/tokens/buy', method: RequestMethod.POST },
-        { path: 'api/tokens/sell', method: RequestMethod.POST },
-        { path: 'api/tokens/submit-signed', method: RequestMethod.POST },
-        { path: 'api/tokens/:pendingId/submit-signed', method: RequestMethod.POST },
-        { path: 'api/transactions/:walletAddress', method: RequestMethod.GET },
-        { path: 'api/transactions/:walletAddress/stats', method: RequestMethod.GET },
-      );
+    // Legacy WalletMiddleware removed from routes:
+    // - /api/presale/* and /api/tokens/* use JSON x-request-signature (XRequestSignatureGuard)
+    // - /api/transactions/* also uses JSON x-request-signature (XRequestSignatureGuard)
+    // Keeping WalletMiddleware in the codebase for now for backwards compatibility if needed later.
     // Note: api/transactions/tx/:signature is public (no auth required)
   }
 }

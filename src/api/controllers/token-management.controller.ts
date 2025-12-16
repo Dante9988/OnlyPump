@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Req, Query, Param, HttpException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Req, Query, Param, HttpException, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader } from '@nestjs/swagger';
 import { Request } from 'express';
 import { TokenManagementService, CreateTokenRequest, CreateAndBuyTokenRequest, BuyTokenRequest, SellTokenRequest } from '../../services/token-management.service';
@@ -7,14 +7,22 @@ import { PriceService } from '../../services/price.service';
 import { SupabaseService } from '../../services/supabase.service';
 import { TransactionResponseDto, SubmitSignedTransactionDto, SubmitTransactionResponseDto } from '../dto/transaction.dto';
 import { CreateTokenDto, BuyTokenDto, SellTokenDto } from '../dto/token.dto';
+import { XRequestSignatureGuard } from '../guards/x-request-signature.guard';
 
 @ApiTags('Token Management')
 @Controller('api/tokens')
 @ApiHeader({
   name: 'x-request-signature',
-  description: 'Base64 encoded signature of the authentication message',
+  description:
+    'JSON payload with wallet, signature, timestamp, nonce, method, path, bodyHash (same format as /api/presale/*)',
   required: true,
 })
+@ApiHeader({
+  name: 'x-solana-cluster',
+  description: 'Target Solana cluster for building transactions: devnet | mainnet-beta (default: devnet)',
+  required: false,
+})
+@UseGuards(XRequestSignatureGuard)
 export class TokenManagementController {
   constructor(
     private readonly tokenManagementService: TokenManagementService,
@@ -35,7 +43,7 @@ export class TokenManagementController {
     @Req() req: Request,
     @Body() dto: BuyTokenDto,
   ): Promise<TransactionResponseDto> {
-    const walletAddress = (req as any).walletAddress;
+    const walletAddress = (req as any)?.user?.walletPubkey || (req as any).walletAddress;
     
     // Validate input
     if (!dto.tokenMint || dto.tokenMint.trim() === '') {
@@ -181,7 +189,7 @@ export class TokenManagementController {
     @Req() req: Request,
     @Body() dto: SellTokenDto,
   ): Promise<TransactionResponseDto> {
-    const walletAddress = (req as any).walletAddress;
+    const walletAddress = (req as any)?.user?.walletPubkey || (req as any).walletAddress;
     
     // Validate input
     if (!dto.tokenMint || dto.tokenMint.trim() === '') {
@@ -276,7 +284,7 @@ export class TokenManagementController {
     @Req() req: Request,
     @Body() dto: CreateTokenDto,
   ): Promise<TransactionResponseDto> {
-    const walletAddress = (req as any).walletAddress;
+    const walletAddress = (req as any)?.user?.walletPubkey || (req as any).walletAddress;
     
     // Validate input
     if (!dto.name || dto.name.trim() === '') {
@@ -359,7 +367,7 @@ export class TokenManagementController {
     @Req() req: Request,
     @Body() dto: CreateTokenDto & { solAmount: number },
   ): Promise<TransactionResponseDto> {
-    const walletAddress = (req as any).walletAddress;
+    const walletAddress = (req as any)?.user?.walletPubkey || (req as any).walletAddress;
     
     // Validate input
     if (!dto.name || dto.name.trim() === '') {
@@ -447,7 +455,13 @@ export class TokenManagementController {
     @Param('pendingId') pendingId: string,
     @Body() dto: SubmitSignedTransactionDto,
   ): Promise<SubmitTransactionResponseDto> {
-    const walletAddress = (req as any).walletAddress;
+    const walletAddress = (req as any)?.user?.walletPubkey || (req as any).walletAddress;
+    if (dto.walletAddress && dto.walletAddress !== walletAddress) {
+      throw new HttpException(
+        { message: 'walletAddress does not match authenticated wallet', error: 'Unauthorized', statusCode: 401 },
+        401,
+      );
+    }
     
     // Validate input
     if (!dto.signedTransaction || dto.signedTransaction.trim() === '') {
@@ -520,7 +534,13 @@ export class TokenManagementController {
     @Req() req: Request,
     @Body() dto: SubmitSignedTransactionDto,
   ): Promise<SubmitTransactionResponseDto> {
-    const walletAddress = (req as any).walletAddress;
+    const walletAddress = (req as any)?.user?.walletPubkey || (req as any).walletAddress;
+    if (dto.walletAddress && dto.walletAddress !== walletAddress) {
+      throw new HttpException(
+        { message: 'walletAddress does not match authenticated wallet', error: 'Unauthorized', statusCode: 401 },
+        401,
+      );
+    }
     
     // Validate input
     if (!dto.signedTransaction || dto.signedTransaction.trim() === '') {

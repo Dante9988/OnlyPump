@@ -41,6 +41,11 @@ import { XRequestSignatureGuard } from '../guards/x-request-signature.guard';
 
 @ApiTags('Presale')
 @Controller('api/presale')
+@ApiHeader({
+  name: 'x-solana-cluster',
+  description: 'Target Solana cluster for building transactions: devnet | mainnet-beta (default: devnet)',
+  required: false,
+})
 export class PresaleController {
   private readonly logger = new Logger(PresaleController.name);
 

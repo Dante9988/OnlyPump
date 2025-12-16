@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PublicKey } from '@solana/web3.js';
 import nacl from 'tweetnacl';
+import bs58 from 'bs58';
 
 /**
  * Service for wallet signature verification
@@ -24,7 +25,21 @@ export class WalletAuthService {
   ): boolean {
     try {
       const publicKey = new PublicKey(walletAddress);
-      const signatureBytes = Buffer.from(signature, 'base64');
+      // Frontend compatibility:
+      // - Some clients send signatures as base64 (preferred)
+      // - Some clients send signatures as base58 (common in Solana UIs)
+      let signatureBytes: Uint8Array;
+      try {
+        const b64 = Buffer.from(signature, 'base64');
+        // Valid ed25519 signatures are 64 bytes; if not, treat as non-base64.
+        if (b64.length === 64) {
+          signatureBytes = b64;
+        } else {
+          signatureBytes = bs58.decode(signature);
+        }
+      } catch {
+        signatureBytes = bs58.decode(signature);
+      }
       const messageBytes = Buffer.from(message, 'utf8');
 
       // Verify using ed25519 (Solana uses ed25519)

@@ -15,6 +15,13 @@ export class WalletMiddleware implements NestMiddleware {
     try {
       // Get signature from header
       const signature = req.headers['x-request-signature'] as string;
+      const clusterHeader = req.headers['x-solana-cluster'] as string | undefined;
+      const clusterRaw = (clusterHeader || 'devnet').toString().trim().toLowerCase();
+      const cluster =
+        clusterRaw === 'mainnet' ? 'mainnet-beta' : clusterRaw;
+      if (cluster !== 'devnet' && cluster !== 'mainnet-beta') {
+        throw new UnauthorizedException(`Unsupported Solana cluster: ${cluster}`);
+      }
 
       if (!signature) {
         throw new UnauthorizedException(
@@ -35,11 +42,24 @@ export class WalletMiddleware implements NestMiddleware {
         );
       }
 
-      // Create standard message to verify
-      const message = this.walletAuthService.createSignMessage(walletAddress);
+      // Attach cluster hint for downstream handlers
+      (req as any).solanaCluster = cluster;
+
+      // Create message to verify (v2 binds to cluster); fall back to v1 for backward compatibility.
+      const messageV1 = this.walletAuthService.createSignMessage(walletAddress);
+      const messageV2 = `${messageV1}\nCluster: ${(req as any).solanaCluster}`;
+
+      // Frontend compatibility: some clients sign a minimal "Wallet + Cluster" message.
+      const minimal1 = `Wallet: ${walletAddress}\nCluster: ${(req as any).solanaCluster}`;
+      const minimal2 = `Wallet: ${walletAddress}\n\nCluster: ${(req as any).solanaCluster}`;
+      const candidates = [messageV2, messageV1, minimal2, minimal1];
 
       // Verify signature matches the wallet address
-      if (!this.walletAuthService.verifySignature(walletAddress, signature, message)) {
+      if (
+        !candidates.some((m) =>
+          this.walletAuthService.verifySignature(walletAddress, signature, m),
+        )
+      ) {
         throw new UnauthorizedException('Invalid signature. Signature does not match wallet address.');
       }
 

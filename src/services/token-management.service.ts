@@ -61,7 +61,6 @@ export interface TokenOperationResult {
 @Injectable()
 export class TokenManagementService {
   private readonly logger = new Logger(TokenManagementService.name);
-  private connection: Connection;
   private pumpSdk: PumpSdk;
   private onlinePumpSdk: OnlinePumpSdk;
   private onlinePumpAmmSdk: OnlinePumpAmmSdk;
@@ -71,11 +70,8 @@ export class TokenManagementService {
     private vanityAddressManager: VanityAddressManagerService,
     private jitoService: JitoService,
     private supabaseService: SupabaseService,
+    private readonly connection: Connection,
   ) {
-    const rpcUrl =
-      this.configService.get<string>('SOLANA_DEVNET_RPC_URL') ||
-      'https://api.devnet.solana.com';
-    this.connection = new Connection(rpcUrl, 'confirmed');
     this.pumpSdk = new PumpSdk();
     this.onlinePumpSdk = new OnlinePumpSdk(this.connection);
     this.onlinePumpAmmSdk = new OnlinePumpAmmSdk(this.connection);
@@ -89,6 +85,7 @@ export class TokenManagementService {
     mint: string;
     bondingCurvePda: string;
     complete: boolean;
+    exists: boolean;
     creator: string;
     realSolReservesLamports: string;
     virtualSolReservesLamports: string;
@@ -102,9 +99,43 @@ export class TokenManagementService {
     if (!global) {
       throw new Error('Failed to fetch Pump.fun global state');
     }
-    const curve = await this.onlinePumpSdk.fetchBondingCurve(mintPk);
+    let curve: any;
+    try {
+      curve = await this.onlinePumpSdk.fetchBondingCurve(mintPk);
+    } catch (e) {
+      const msg = (e as Error)?.message || String(e);
+      // Common case for a reserved mint (token not created yet): bonding curve account doesn't exist.
+      if (msg.includes('Account does not exist') || msg.includes('has no data')) {
+        return {
+          mint: mintPk.toBase58(),
+          bondingCurvePda: bondingCurvePda(mintPk).toBase58(),
+          complete: false,
+          exists: false,
+          creator: '',
+          realSolReservesLamports: '0',
+          virtualSolReservesLamports: '0',
+          realTokenReservesRaw: '0',
+          virtualTokenReservesRaw: '0',
+          tokenTotalSupplyRaw: '0',
+          solToCompleteLamports: '0',
+        };
+      }
+      throw e;
+    }
     if (!curve) {
-      throw new Error('Failed to fetch Pump.fun bonding curve');
+      return {
+        mint: mintPk.toBase58(),
+        bondingCurvePda: bondingCurvePda(mintPk).toBase58(),
+        complete: false,
+        exists: false,
+        creator: '',
+        realSolReservesLamports: '0',
+        virtualSolReservesLamports: '0',
+        realTokenReservesRaw: '0',
+        virtualTokenReservesRaw: '0',
+        tokenTotalSupplyRaw: '0',
+        solToCompleteLamports: '0',
+      };
     }
 
     const remaining = curve.realTokenReserves; // BN
@@ -122,6 +153,7 @@ export class TokenManagementService {
       mint: mintPk.toBase58(),
       bondingCurvePda: bondingCurvePda(mintPk).toBase58(),
       complete: !!curve.complete,
+      exists: true,
       creator: curve.creator.toBase58(),
       realSolReservesLamports: curve.realSolReserves.toString(),
       virtualSolReservesLamports: curve.virtualSolReserves.toString(),
